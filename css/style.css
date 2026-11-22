@@ -112,7 +112,7 @@ small { font-size: .55em; opacity: .7; font-weight: 500; }
 @keyframes pulse { 50% { transform: scale(1.08); } }
 
 .judge-body { display: grid; grid-template-columns: minmax(300px, 1fr) 1fr; gap: 2rem; align-items: start; }
-.artwork { margin: 0; background: var(--paper); border: 4px solid var(--ink); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); color: var(--ink); transform: rotate(-1.5deg); }
+.artwork { max-width: min(100%, 68vh); margin: 0; background: var(--paper); border: 4px solid var(--ink); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); color: var(--ink); transform: rotate(-1.5deg); }
 .artwork img { width: 100%; aspect-ratio: 1; display: block; border-radius: 12px; background: white; }
 .artwork figcaption { margin-top: .5rem; font-size: 1.2rem; font-weight: 700; display: flex; gap: .5rem; align-items: center; }
 .options { list-style: none; padding: 0; margin: 0 0 1.5rem; counter-reset: opt; }

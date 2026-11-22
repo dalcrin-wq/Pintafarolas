@@ -14,6 +14,8 @@ let me = null, state = null, viewKey = "", unsub = null;
 let pad = null, avatarTimer = null, sending = false, presenceHooked = false;
 
 const meP = () => state?.players?.[me.uid];
+// Empates: si dos tenéis la misma puntuación, compartís puesto.
+const myPosition = () => 1 + sortedPlayers(state).filter((x) => (x.score || 0) > (meP()?.score || 0)).length;
 const roomPath = (p = "") => ref(db, `rooms/${code}${p ? "/" + p : ""}`);
 
 async function boot() {
@@ -153,11 +155,11 @@ function build(kind) {
         <p class="muted">${g ? `Con este dibujo te llevas <b>+${g}</b> puntos.` : "Vamos a ver quién ha mentido mejor."}</p>`);
     }
     case "scores": {
-      const pos = sortedPlayers(s).sort((a, b) => (b.score || 0) - (a.score || 0)).findIndex((p) => p.uid === me.uid) + 1;
+      const pos = myPosition();
       return card(`<p class="big-emoji">📊</p><h2>Vas ${pos}º</h2><p class="muted">Mira la clasificación en la pantalla.</p>`);
     }
     case "end": {
-      const pos = sortedPlayers(s).sort((a, b) => (b.score || 0) - (a.score || 0)).findIndex((p) => p.uid === me.uid) + 1;
+      const pos = myPosition();
       return card(`<p class="big-emoji">${pos === 1 ? "🏆" : "🎨"}</p><h2>${pos === 1 ? "¡Has ganado!" : `Has quedado ${pos}º`}</h2>
         <p class="muted">${pos === 1 ? "Eres oficialmente la persona menos fiable de la sala." : "Para la próxima, miente con más convicción."}</p>
         <p class="muted">Si el anfitrión pulsa «Otra partida», volverás a la sala.</p>`);
@@ -300,6 +302,8 @@ function refresh() {
   if (!p) return;
   const sc = $("[data-score]");
   if (sc) sc.textContent = `${p.score || 0} pts`;
+  const av = $(".me .avatar");
+  if (av && (av.getAttribute("src") || "") !== (safeImg(p.avatar) || "")) av.outerHTML = avatarHTML(p, "tiny");
   if (state.phase !== "lobby") return;
   const ready = $("#ready");
   if (ready) {

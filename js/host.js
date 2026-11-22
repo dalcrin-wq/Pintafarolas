@@ -37,6 +37,7 @@ Voice.setEnabled(settings.voice);
 const nameOf = (uid) => state?.players?.[uid]?.name || "alguien";
 const active = () => sortedPlayers(state).filter((p) => p.connected !== false);
 const ranking = () => sortedPlayers(state).sort((a, b) => (b.score || 0) - (a.score || 0));
+const winners = () => { const r = ranking(); const top = r[0]?.score || 0; return r.filter((p) => (p.score || 0) === top); };
 const canStart = () => { const a = active(); return a.length >= MIN_PLAYERS && a.every((p) => p.ready); };
 
 /* ---------------- Menú y ajustes ---------------- */
@@ -176,7 +177,7 @@ function onEnterPhase() {
     case "voting": Voice.say("voting"); break;
     case "reveal": runReveal(); break;
     case "scores": Voice.say("scores"); break;
-    case "end": { const w = ranking()[0]; if (w) Voice.say("end", { name: w.name }); break; }
+    case "end": { const w = winners(); if (w.length) Voice.say(w.length > 1 ? "tie" : "end", { name: w.map((p) => p.name).join(" y ") }); break; }
   }
 }
 
@@ -548,11 +549,18 @@ function renderScores() {
     </section>`;
 }
 
+function winTitle() {
+  const w = winners();
+  if (!w.length) return "¡Gana nadie!";
+  if (w.length === 1) return `¡Gana ${esc(w[0].name)}!`;
+  return `¡Empate entre ${w.map((p) => esc(p.name)).join(" y ")}!`;
+}
+
 function renderEnd() {
   const r = ranking();
   app.innerHTML = `
     <section class="stage end">
-      <h2 class="winner-title">¡Gana ${esc(r[0]?.name || "nadie")}!</h2>
+      <h2 class="winner-title">${winTitle()}</h2>
       <div class="podium">${r.slice(0, 3).map((p, i) => `
         <div class="pod p${i + 1}">${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
           <span class="score">${p.score || 0}</span><div class="block">${i + 1}</div></div>`).join("")}

@@ -53,6 +53,9 @@ export const LINES = {
     "Vamos a ver la clasificación.",
     "Marcador. Los de abajo, no lloréis, que aún queda partida.",
   ],
+  tie: [
+    "¡Empate entre {name}! Mentís igual de bien. Eso no sé si es un elogio.",
+  ],
   end: [
     "Y el gran ganador es… {name}. Enhorabuena, eres el mejor mentiroso de la sala.",
     "Gana {name}. Dibuja fatal, pero miente de maravilla.",
