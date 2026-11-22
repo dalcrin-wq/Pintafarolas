@@ -1,0 +1,596 @@
+// Pantalla grande (tele/ordenador). Es el árbitro: decide cuándo cambia cada fase.
+import { login, db, ref, set, update, get, onValue, remove, serverTimestamp, serverNow } from "./firebase.js";
+import { PROMPTS, HOUSE_LIES } from "./prompts.js";
+import { Voice } from "./voice.js";
+import { Music } from "./music.js";
+import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
+
+export const TITLE = "Garabatrola";
+const DEFAULTS = { drawTime: 90, lieTime: 45, voteTime: 30, rounds: 2, music: true, voice: true };
+const MIN_PLAYERS = 2;
+const REVEAL_STEP = 5000;
+
+const app = $("#app");
+let settings = loadSettings();
+let me = null, code = null, roomRef = null, state = null, unsub = null;
+let viewKey = "", timer = null, advancedFor = -1;
+let revealTimers = [], usedPrompts = new Set(), knownPlayers = new Set(), primed = false;
+
+function loadSettings() {
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("gt_settings") || "{}") }; }
+  catch { return { ...DEFAULTS }; }
+}
+function saveSettings() {
+  try { localStorage.setItem("gt_settings", JSON.stringify(settings)); } catch { /* sin almacenamiento */ }
+}
+
+// El navegador no deja sonar nada hasta el primer toque.
+let audioUnlocked = false;
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  if (settings.music) Music.start();
+}
+document.addEventListener("pointerdown", unlockAudio);
+Voice.setEnabled(settings.voice);
+
+const nameOf = (uid) => state?.players?.[uid]?.name || "alguien";
+const active = () => sortedPlayers(state).filter((p) => p.connected !== false);
+const ranking = () => sortedPlayers(state).sort((a, b) => (b.score || 0) - (a.score || 0));
+const canStart = () => { const a = active(); return a.length >= MIN_PLAYERS && a.every((p) => p.ready); };
+
+/* ---------------- Menú y ajustes ---------------- */
+
+function showMenu() {
+  leaveRoom();
+  viewKey = "menu";
+  app.innerHTML = `
+    <section class="menu">
+      <h1 class="logo">${TITLE}</h1>
+      <p class="tagline">Si no sabes dibujar, aprende a mentir.</p>
+      <div class="menu-buttons">
+        <button class="btn big" id="play">Jugar</button>
+        <button class="btn ghost" id="cfg">Ajustes</button>
+      </div>
+      <p class="hint">Pon esta pantalla en la tele. Los demás juegan con el móvil.</p>
+    </section>`;
+  $("#play").onclick = () => { unlockAudio(); Voice.say("welcome"); createRoom(); };
+  $("#cfg").onclick = () => { unlockAudio(); showSettings(); };
+}
+
+function showSettings() {
+  viewKey = "settings";
+  const opt = (vals, cur, fmt = (v) => `${v} s`) =>
+    vals.map((v) => `<option value="${v}" ${v == cur ? "selected" : ""}>${fmt(v)}</option>`).join("");
+  app.innerHTML = `
+    <section class="panel settings">
+      <h2>Ajustes</h2>
+      <label>Tiempo para dibujar <select id="s-draw">${opt([60, 90, 120, 150], settings.drawTime)}</select></label>
+      <label>Tiempo para mentir <select id="s-lie">${opt([30, 45, 60, 90], settings.lieTime)}</select></label>
+      <label>Tiempo para votar <select id="s-vote">${opt([20, 30, 45], settings.voteTime)}</select></label>
+      <label>Rondas <select id="s-rounds">${opt([1, 2, 3], settings.rounds, (v) => v)}</select></label>
+      <label class="check"><input type="checkbox" id="s-music" ${settings.music ? "checked" : ""}> Música</label>
+      <label class="check"><input type="checkbox" id="s-voice" ${settings.voice ? "checked" : ""}> Voz de la presentadora</label>
+      <button class="btn" id="back">Guardar y volver</button>
+    </section>`;
+  $("#back").onclick = () => {
+    settings.drawTime = +$("#s-draw").value;
+    settings.lieTime = +$("#s-lie").value;
+    settings.voteTime = +$("#s-vote").value;
+    settings.rounds = +$("#s-rounds").value;
+    settings.music = $("#s-music").checked;
+    settings.voice = $("#s-voice").checked;
+    saveSettings();
+    Voice.setEnabled(settings.voice);
+    settings.music ? Music.start() : Music.stop();
+    showMenu();
+  };
+}
+
+/* ---------------- Sala ---------------- */
+
+async function createRoom() {
+  app.innerHTML = `<section class="menu"><p class="loading">Preparando la sala…</p></section>`;
+  try {
+    me = me || await login();
+    let c = null;
+    for (let i = 0; i < 10 && !c; i++) {
+      const t = randCode();
+      const s = await get(ref(db, `rooms/${t}/host`));
+      if (!s.exists()) c = t;
+    }
+    if (!c) throw new Error("No encuentro un código libre");
+    code = c;
+    const { drawTime, lieTime, voteTime, rounds } = settings;
+    await set(ref(db, `rooms/${code}`), {
+      host: me.uid, phase: "lobby", phaseId: 1, createdAt: serverTimestamp(),
+      settings: { drawTime, lieTime, voteTime, rounds },
+    });
+    sessionStorage.setItem("gt_room", code);
+    listen();
+    Voice.say("lobby");
+  } catch (e) {
+    console.error(e);
+    app.innerHTML = `<section class="menu"><p class="error">No he podido crear la sala: ${esc(e.message)}</p>
+      <button class="btn" id="back">Volver</button></section>`;
+    $("#back").onclick = showMenu;
+  }
+}
+
+function listen() {
+  roomRef = ref(db, `rooms/${code}`);
+  unsub = onValue(roomRef, (snap) => {
+    state = snap.val();
+    if (!state) { code = null; showMenu(); return; }
+    onState();
+  });
+}
+
+function leaveRoom() {
+  unsub?.(); unsub = null;
+  clearTimeout(timer); clearReveal();
+  if (roomRef) remove(roomRef).catch(() => {});
+  state = null; code = null; roomRef = null;
+  knownPlayers = new Set(); primed = false; advancedFor = -1;
+  sessionStorage.removeItem("gt_room");
+}
+
+function onState() {
+  announceJoins();
+  const key = `${state.phase}|${state.phaseId}`;
+  if (key !== viewKey) {
+    viewKey = key;
+    renderPhase();
+    onEnterPhase();
+  } else {
+    updatePhase();
+  }
+  checkProgress();
+}
+
+function announceJoins() {
+  for (const p of sortedPlayers(state)) {
+    if (knownPlayers.has(p.uid)) continue;
+    knownPlayers.add(p.uid);
+    if (primed && state.phase === "lobby") Voice.say("join", { name: p.name });
+  }
+  primed = true;
+}
+
+/* ---------------- Máquina de fases ---------------- */
+
+function setPhase(phase, extra = {}, seconds = null) {
+  return update(roomRef, {
+    phase,
+    phaseId: (state?.phaseId || 0) + 1,
+    deadline: seconds ? Math.round(serverNow() + seconds * 1000) : null,
+    ...extra,
+  });
+}
+
+function onEnterPhase() {
+  armFromDeadline();
+  switch (state.phase) {
+    case "drawing": Voice.say(state.round === 1 ? "start" : "drawing"); break;
+    case "lying": Voice.say("lying", { name: nameOf(state.current?.artist) }); break;
+    case "voting": Voice.say("voting"); break;
+    case "reveal": runReveal(); break;
+    case "scores": Voice.say("scores"); break;
+    case "end": { const w = ranking()[0]; if (w) Voice.say("end", { name: w.name }); break; }
+  }
+}
+
+// El temporizador sale de la base de datos, así que si recargas la tele no se pierde.
+function armFromDeadline() {
+  clearTimeout(timer);
+  if (!state.deadline) return;
+  const pid = state.phaseId;
+  const grace = ["drawing", "lying", "voting"].includes(state.phase) ? 1500 : 0;
+  const ms = Math.max(0, state.deadline - serverNow()) + grace;
+  timer = setTimeout(() => { if (state && state.phaseId === pid) advance(); }, ms);
+}
+
+function checkProgress() {
+  const s = state;
+  const act = active().map((p) => p.uid);
+  if (s.phase === "lobby" && s.startRequested) {
+    update(roomRef, { startRequested: null });
+    if (canStart()) startGame();
+    return;
+  }
+  if (s.phase === "drawing" && act.length && act.every((u) => s.drawings?.[u])) advance();
+  const judges = act.filter((u) => u !== s.current?.artist);
+  if (s.phase === "lying" && judges.every((u) => s.lies?.[u])) advance();
+  if (s.phase === "voting" && judges.every((u) => s.votes?.[u])) advance();
+}
+
+async function advance() {
+  if (!state || advancedFor === state.phaseId) return;
+  advancedFor = state.phaseId;
+  clearTimeout(timer);
+  const s = state;
+  try {
+    switch (s.phase) {
+      case "drawing": return await startJudging();
+      case "lying": return await startVoting();
+      case "voting": return await startReveal();
+      case "reveal": return await nextDrawing(s.queue || []);
+      case "scores":
+        return await (s.round < (s.settings?.rounds || 1) ? startRound(s.round + 1) : setPhase("end"));
+    }
+  } catch (e) {
+    console.error(e);
+    advancedFor = -1;
+  }
+}
+
+function startGame() {
+  const upd = {};
+  for (const p of sortedPlayers(state)) upd[`players/${p.uid}/score`] = 0;
+  usedPrompts = new Set();
+  return startRound(1, upd);
+}
+
+function startRound(n, extra = {}) {
+  const pool = shuffle(PROMPTS.filter((p) => !usedPrompts.has(p)));
+  const prompts = {};
+  active().forEach((p, i) => {
+    const t = pool[i % pool.length];
+    prompts[p.uid] = t;
+    usedPrompts.add(t);
+  });
+  return setPhase("drawing", {
+    ...extra, round: n, prompts,
+    drawings: null, lies: null, votes: null, options: null, results: null,
+    current: null, queue: null, judgeTotal: null,
+  }, state.settings.drawTime);
+}
+
+function startJudging() {
+  const queue = shuffle(Object.keys(state.drawings || {}).filter((u) => state.prompts?.[u]));
+  return nextDrawing(queue, queue.length);
+}
+
+function nextDrawing(queue, judgeTotal = state.judgeTotal || queue.length) {
+  if (!queue.length) {
+    return setPhase("scores", { current: null, queue: null, lies: null, votes: null, options: null, results: null }, 9);
+  }
+  const artist = queue[0];
+  return setPhase("lying", {
+    current: { artist, prompt: state.prompts[artist], index: judgeTotal - queue.length + 1, total: judgeTotal },
+    queue: queue.slice(1), judgeTotal,
+    lies: null, votes: null, options: null, results: null,
+  }, state.settings.lieTime);
+}
+
+function startVoting() {
+  const s = state;
+  const truth = s.current.prompt;
+  const nt = normalize(truth);
+  // Mentiras iguales se juntan en una sola opción con varios autores.
+  const groups = new Map();
+  for (const [uid, text] of Object.entries(s.lies || {})) {
+    const n = normalize(text);
+    if (!n || n === nt) continue;
+    if (!groups.has(n)) groups.set(n, { text: String(text).slice(0, 60), authors: [] });
+    groups.get(n).authors.push(uid);
+  }
+  const opts = [{ id: "t", text: truth, kind: "truth" }];
+  let i = 0;
+  for (const g of groups.values()) opts.push({ id: `l${i++}`, text: g.text, kind: "lie", authors: g.authors });
+  // Si hay pocas opciones, la casa mete alguna mentira propia.
+  const used = new Set(opts.map((o) => normalize(o.text)));
+  const assigned = new Set(Object.values(s.prompts || {}));
+  const house = shuffle([...HOUSE_LIES, ...PROMPTS.filter((p) => !assigned.has(p))]);
+  for (let h = 0; opts.length < 3 && h < house.length; h++) {
+    const n = normalize(house[h]);
+    if (used.has(n)) continue;
+    used.add(n);
+    opts.push({ id: `h${h}`, text: house[h], kind: "house" });
+  }
+  return setPhase("voting", { options: shuffle(opts), votes: null }, s.settings.voteTime);
+}
+
+function startReveal() {
+  const s = state;
+  const artist = s.current.artist;
+  const byId = Object.fromEntries((s.options || []).map((o) => [o.id, { ...o, voters: [] }]));
+  for (const [uid, id] of Object.entries(s.votes || {})) {
+    const o = byId[id];
+    if (o && uid !== artist && !(o.authors || []).includes(uid)) o.voters.push(uid);
+  }
+  // Puntos: acertar la verdad +1000 (y +500 al artista por cada acierto); colar tu mentira +500 por víctima.
+  const gains = {};
+  const add = (u, n) => { gains[u] = (gains[u] || 0) + n; };
+  for (const o of Object.values(byId)) {
+    for (const v of o.voters) {
+      if (o.kind === "truth") { add(v, 1000); add(artist, 500); }
+      else if (o.kind === "lie") for (const a of o.authors || []) add(a, 500);
+    }
+  }
+  const fooled = Object.values(byId)
+    .filter((o) => o.kind !== "truth" && o.voters.length)
+    .sort((a, b) => a.voters.length - b.voters.length);
+  const seq = [...fooled, byId.t];
+  const upd = {};
+  for (const [u, n] of Object.entries(gains)) upd[`players/${u}/score`] = (s.players?.[u]?.score || 0) + n;
+  return setPhase("reveal", { ...upd, results: { seq, gains } }, (seq.length * REVEAL_STEP) / 1000 + 3);
+}
+
+function playAgain() {
+  const upd = {
+    phase: "lobby", phaseId: state.phaseId + 1, deadline: null, round: null, prompts: null,
+    drawings: null, lies: null, votes: null, options: null, results: null,
+    current: null, queue: null, judgeTotal: null, startRequested: null,
+  };
+  for (const p of sortedPlayers(state)) {
+    upd[`players/${p.uid}/ready`] = false;
+    upd[`players/${p.uid}/score`] = 0;
+  }
+  advancedFor = -1;
+  return update(roomRef, upd);
+}
+
+/* ---------------- Pantallas ---------------- */
+
+function renderPhase() {
+  clearReveal();
+  switch (state.phase) {
+    case "lobby": return renderLobby();
+    case "drawing": return renderDrawing();
+    case "lying":
+    case "voting": return renderJudge();
+    case "reveal": return renderReveal();
+    case "scores": return renderScores();
+    case "end": return renderEnd();
+  }
+}
+
+function updatePhase() {
+  if (state.phase === "lobby") renderLobbyPlayers();
+  else if (["drawing", "lying", "voting"].includes(state.phase)) renderProgress();
+}
+
+function joinURL() {
+  const u = new URL("play.html", location.href);
+  u.search = ""; u.hash = "";
+  u.searchParams.set("room", code);
+  return u.toString();
+}
+
+function renderLobby() {
+  const url = joinURL();
+  app.innerHTML = `
+    <section class="lobby">
+      <div class="join-box">
+        <div class="qr" id="qr"></div>
+        <p class="join-text">Escanea el código o entra en<br><b>${esc(url.replace(/^https?:\/\//, ""))}</b></p>
+        <p class="room-code">Sala <span>${code}</span></p>
+      </div>
+      <div class="lobby-side">
+        <h2>Jugadores</h2>
+        <div class="players" id="players"></div>
+        <p class="lobby-status" id="lobby-status"></p>
+        <div class="row">
+          <button class="btn big" id="start">Empezar</button>
+          <button class="btn ghost" id="exit">Salir</button>
+        </div>
+      </div>
+    </section>`;
+  const qr = window.qrcode(0, "M");
+  qr.addData(url);
+  qr.make();
+  $("#qr").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+  $("#start").onclick = () => { if (canStart()) startGame(); };
+  $("#exit").onclick = showMenu;
+  renderLobbyPlayers();
+}
+
+function renderLobbyPlayers() {
+  const el = $("#players");
+  if (!el) return;
+  const ps = sortedPlayers(state);
+  el.innerHTML = ps.length ? ps.map((p) => `
+      <div class="pcard ${p.connected === false ? "off" : ""} ${p.ready ? "ready" : ""}">
+        ${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
+        <span class="badge">${p.connected === false ? "Desconectado" : p.ready ? "¡Listo!" : "Dibujándose…"}</span>
+      </div>`).join("")
+    : `<p class="empty-msg">Aún no ha llegado nadie. Esto parece una fiesta de los martes.</p>`;
+  const n = active().length;
+  const ok = canStart();
+  $("#start").disabled = !ok;
+  $("#lobby-status").textContent = n < MIN_PLAYERS
+    ? `Hacen falta al menos ${MIN_PLAYERS} jugadores (con 3 o más tiene mucha más gracia).`
+    : ok ? "Todo el mundo está listo. ¡Dale!" : "Esperando a que todos pulsen «¡Estoy listo!» en el móvil.";
+}
+
+function renderDrawing() {
+  app.innerHTML = `
+    <section class="stage">
+      <header class="stage-head">
+        <h2>¡A dibujar! <small>Ronda ${state.round} de ${state.settings.rounds}</small></h2>
+        <div class="timer" data-timer></div>
+      </header>
+      <p class="stage-sub">Mirad el móvil: cada uno tiene una frase secreta.</p>
+      <div class="players progress" id="progress"></div>
+    </section>`;
+  renderProgress();
+}
+
+function renderProgress() {
+  const s = state;
+  const el = $("#progress");
+  if (!el) return;
+  let list = active();
+  let done;
+  if (s.phase === "drawing") done = (u) => !!s.drawings?.[u];
+  else {
+    list = list.filter((p) => p.uid !== s.current?.artist);
+    done = s.phase === "lying" ? (u) => !!s.lies?.[u] : (u) => !!s.votes?.[u];
+  }
+  el.innerHTML = list.map((p) => `
+    <div class="pcard small ${done(p.uid) ? "done" : ""}">
+      ${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
+      <span class="badge">${done(p.uid) ? "✓" : "…"}</span>
+    </div>`).join("");
+}
+
+function artworkHTML() {
+  const s = state;
+  const a = s.players?.[s.current.artist];
+  return `
+    <figure class="artwork">
+      <img src="${safeImg(s.drawings?.[s.current.artist])}" alt="">
+      <figcaption>${avatarHTML(a, "tiny")} Obra de ${esc(a?.name || "?")}</figcaption>
+    </figure>`;
+}
+
+function renderJudge() {
+  const s = state;
+  const voting = s.phase === "voting";
+  app.innerHTML = `
+    <section class="stage judge">
+      <header class="stage-head">
+        <h2>${voting ? "¿Cuál es la verdad?" : "¿Qué demonios es esto?"}
+          <small>Dibujo ${s.current.index} de ${s.current.total}</small></h2>
+        <div class="timer" data-timer></div>
+      </header>
+      <div class="judge-body">
+        ${artworkHTML()}
+        <div class="judge-side">
+          ${voting
+            ? `<ol class="options">${(s.options || []).map((o) => `<li>${esc(o.text)}</li>`).join("")}</ol>`
+            : `<p class="stage-sub">Escribid en el móvil un título falso que engañe a los demás.</p>`}
+          <div class="players progress" id="progress"></div>
+        </div>
+      </div>
+    </section>`;
+  renderProgress();
+}
+
+function renderReveal() {
+  const s = state;
+  app.innerHTML = `
+    <section class="stage judge">
+      <header class="stage-head"><h2>Resultados <small>Dibujo ${s.current.index} de ${s.current.total}</small></h2></header>
+      <div class="judge-body">
+        ${artworkHTML()}
+        <div class="judge-side"><div id="reveal-card" class="reveal-card"></div></div>
+      </div>
+    </section>`;
+}
+
+function clearReveal() {
+  revealTimers.forEach(clearTimeout);
+  revealTimers = [];
+}
+
+function runReveal() {
+  clearReveal();
+  const pid = state.phaseId;
+  (state.results?.seq || []).forEach((o, i) => {
+    revealTimers.push(setTimeout(() => {
+      if (state?.phaseId !== pid) return;
+      renderRevealCard(o);
+      speakReveal(o);
+    }, i * REVEAL_STEP + 400));
+  });
+}
+
+function renderRevealCard(o) {
+  const s = state;
+  const el = $("#reveal-card");
+  if (!el) return;
+  const voters = (o.voters || []).map((u) => s.players?.[u]).filter(Boolean);
+  let verdict;
+  if (o.kind === "truth") {
+    verdict = `<p class="verdict truth">¡LA VERDAD!</p>` + (voters.length
+      ? `<p class="points">+1000 a quien acertó · +${500 * voters.length} para ${esc(nameOf(s.current.artist))}</p>`
+      : `<p class="points">Nadie acertó. Ni el artista sabría qué dibujó.</p>`);
+  } else if (o.kind === "lie") {
+    const names = (o.authors || []).map((u) => esc(nameOf(u))).join(" y ");
+    verdict = `<p class="verdict lie">Mentira de ${names}</p><p class="points">+${500 * voters.length} puntos</p>`;
+  } else {
+    verdict = `<p class="verdict lie">Mentira de la casa</p><p class="points">Aquí no gana nadie. Bueno, yo.</p>`;
+  }
+  el.innerHTML = `
+    <div class="rc-inner pop ${o.kind}">
+      <p class="rc-text">«${esc(o.text)}»</p>
+      <div class="voters">${voters.map((p) => `<span class="voter">${avatarHTML(p, "tiny")}${esc(p.name)}</span>`).join("")
+        || `<span class="muted">Nadie lo votó</span>`}</div>
+      ${verdict}
+    </div>`;
+}
+
+function speakReveal(o) {
+  Voice.say(o.text);
+  if (o.kind === "truth") Voice.say(o.voters?.length ? "truth" : "noOneTruth");
+  else if (o.kind === "lie") Voice.say("fooled", { name: (o.authors || []).map(nameOf).join(" y ") });
+  else Voice.say("house");
+}
+
+function boardHTML(list, offset = 0) {
+  const max = Math.max(1, ...ranking().map((p) => p.score || 0));
+  return list.map((p, i) => `
+    <div class="brow">
+      <span class="pos">${i + 1 + offset}</span>${avatarHTML(p, "tiny")}
+      <span class="pname">${esc(p.name)}</span>
+      <div class="bar"><div style="width:${Math.round(100 * (p.score || 0) / max)}%"></div></div>
+      <span class="score">${p.score || 0}</span>
+    </div>`).join("");
+}
+
+function renderScores() {
+  app.innerHTML = `
+    <section class="stage">
+      <header class="stage-head"><h2>Clasificación <small>Ronda ${state.round} de ${state.settings.rounds}</small></h2></header>
+      <div class="board">${boardHTML(ranking())}</div>
+    </section>`;
+}
+
+function renderEnd() {
+  const r = ranking();
+  app.innerHTML = `
+    <section class="stage end">
+      <h2 class="winner-title">¡Gana ${esc(r[0]?.name || "nadie")}!</h2>
+      <div class="podium">${r.slice(0, 3).map((p, i) => `
+        <div class="pod p${i + 1}">${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
+          <span class="score">${p.score || 0}</span><div class="block">${i + 1}</div></div>`).join("")}
+      </div>
+      <div class="board compact">${boardHTML(r.slice(3), 3)}</div>
+      <div class="row center">
+        <button class="btn big" id="again">Otra partida</button>
+        <button class="btn ghost" id="menu">Menú</button>
+      </div>
+    </section>`;
+  $("#again").onclick = playAgain;
+  $("#menu").onclick = showMenu;
+}
+
+// Cuenta atrás en pantalla.
+setInterval(() => {
+  const t = document.querySelector("[data-timer]");
+  if (!t || !state?.deadline) return;
+  const secs = Math.max(0, Math.ceil((state.deadline - serverNow()) / 1000));
+  t.textContent = secs;
+  t.classList.toggle("hurry", secs <= 10);
+}, 250);
+
+async function boot() {
+  const saved = sessionStorage.getItem("gt_room");
+  if (saved) {
+    try {
+      me = await login();
+      const s = await get(ref(db, `rooms/${saved}`));
+      if (s.exists() && s.val().host === me.uid) {
+        code = saved;
+        listen();
+        return;
+      }
+    } catch (e) { console.error(e); }
+    sessionStorage.removeItem("gt_room");
+  }
+  showMenu();
+}
+
+boot();
