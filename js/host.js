@@ -210,7 +210,7 @@ function announceJoins() {
     const online = p.connected !== false;
     if (!knownPlayers.has(p.uid)) {
       knownPlayers.set(p.uid, online);
-      if (primed && state.phase === "lobby") Voice.say("entra");
+      if (primed && state.phase === "lobby") Voice.say("entra", { ifIdle: true });
       continue;
     }
     const was = knownPlayers.get(p.uid);
@@ -660,6 +660,7 @@ function renderEnd() {
       </div>
     </section>`;
   $("#again").onclick = playAgain;
+  setTimeout(() => $("#again")?.focus(), 50);
   $("#menu").onclick = () => { Voice.say("adios", { interrupt: true }); showMenu(); };
 }
 

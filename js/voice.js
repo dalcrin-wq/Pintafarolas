@@ -77,8 +77,9 @@ export const Voice = {
     if (!v) this.stop();
   },
   /** Dice una frase del momento indicado. `interrupt` corta lo que esté sonando. */
-  say(moment, { interrupt = false } = {}) {
+  say(moment, { interrupt = false, ifIdle = false } = {}) {
     if (!enabled) return;
+    if (ifIdle && (current || queue.length)) return; // p. ej. si entran tres a la vez, un saludo basta
     const code = pickCode(moment);
     if (!code) return;
     if (interrupt) this.stop();
