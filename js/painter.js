@@ -249,7 +249,7 @@ export function startPainter() {
     const sc = SCENES[scene] || SCENES.menu;
     c.style.transformOrigin = `${Math.round((sc.light[0] + (Math.random() - 0.5) * 0.3) * 100)}% ${Math.round((sc.light[1] + (Math.random() - 0.5) * 0.3) * 100)}%`;
     // Y además gira un poco, cada cuadro hacia un lado.
-    c.style.setProperty("--giro", `${(Math.random() < 0.5 ? -1 : 1) * (1.2 + Math.random() * 0.8)}deg`);
+    c.style.setProperty("--giro", `${(Math.random() < 0.5 ? -1 : 1) * (3.5 + Math.random() * 2)}deg`);
     layer.appendChild(c);
     const old = current;
     current = c;

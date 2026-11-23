@@ -21,7 +21,7 @@ function defaultGroove() {
 // En el menú, todo baila bastante más: es el escaparate.
 function frames(strong, menu, kind = "l") {
   if (kind === "btn") {
-    const y = strong ? 7 : 4, r = strong ? 2.5 : 1.5;
+    const y = strong ? 7 : 1.2, r = strong ? 2.5 : 0.3;
     return [
       { transform: "translateY(0) rotate(0deg) scale(1)", easing: "ease-out" },
       { transform: `translateY(-${y}px) rotate(-${r}deg) scale(1.04)`, offset: 0.18, easing: "ease-in" },
@@ -30,8 +30,9 @@ function frames(strong, menu, kind = "l") {
       { transform: "translateY(0) rotate(0deg) scale(1)" },
     ];
   }
-  const k = menu ? 1.9 : 1;
-  const y = (strong ? 0.09 : 0.04) * k, r = (strong ? 4 : 1.8) * k, s = 1 + (strong ? 0.06 : 0.015) * k;
+  // Sin bombo (o sin música), casi quietas: un respiro. Con bombo, fiesta. El contraste es la gracia.
+  const k = menu && strong ? 1.9 : 1;
+  const y = (strong ? 0.09 : 0.012) * k, r = (strong ? 4 : 0.5) * k, s = 1 + (strong ? 0.06 : 0.003) * k;
   return [
     { transform: "translateY(0) rotate(0deg) scale(1)", easing: "ease-out" },
     { transform: `translateY(-${y}em) rotate(-${r}deg) scale(${s})`, offset: 0.18, easing: "ease-in" },
@@ -148,7 +149,7 @@ function pumpLoop() {
   const toBeat = ((1 - ((g.phase * 2) % 1)) % 1) * beatMs;
   setTimeout(() => {
     const ls = [...document.querySelectorAll(".logo .l, .winner-title .l")];
-    const busy = g.intense ? 1 : Math.random() < 0.5;
+    const busy = g.intense; // solo se hinchan cuando suena el bombo
     if (ls.length && busy) {
       const n = g.intense && Math.random() < 0.35 ? 2 : 1;
       for (let k = 0; k < n; k++) {
