@@ -9,7 +9,7 @@ import { startMotion } from "./motion.js";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
-const DEFAULTS = { pace: "normal", rounds: 2, spicy: false, canvas: "comodo", hideCode: false, music: true, voice: true, sfx: true };
+const DEFAULTS = { pace: "normal", spicy: false, canvas: "comodo", hideCode: false, music: true, voice: true, sfx: true };
 // Ritmo: segundos para dibujar, mentir y votar.
 const PACES = {
   normal: { draw: 75, lie: 40, vote: 25 },
@@ -17,6 +17,9 @@ const PACES = {
   tranquilo: { draw: 130, lie: 75, vote: 45 },
 };
 const MIN_PLAYERS = 2;
+// Rondas automáticas, como el original: con poca gente se juegan más rondas,
+// con mucha, menos (cada ronda ya trae un dibujo por jugador).
+const rondasPara = (n) => (n <= 3 ? 3 : n <= 6 ? 2 : 1);
 const MAX_PLAYERS = 10;
 // El destape, por actos (ms). Ver revealPlan().
 const RV = { intro: 2600, fuera: 4800, lie: 6200, truth: 6800, points: 4800, sum: 8000 };
@@ -37,7 +40,7 @@ function loadSettings() {
 }
 function roomSettings() {
   const p = PACES[settings.pace];
-  return { drawTime: p.draw, lieTime: p.lie, voteTime: p.vote, rounds: settings.rounds, spicy: !!settings.spicy, canvas: settings.canvas };
+  return { drawTime: p.draw, lieTime: p.lie, voteTime: p.vote, spicy: !!settings.spicy, canvas: settings.canvas };
 }
 function saveSettings() {
   try { localStorage.setItem("gt_settings", JSON.stringify(settings)); } catch { /* sin almacenamiento */ }
@@ -120,8 +123,6 @@ function showMenu() {
 const SETTING_ROWS = [
   { key: "pace", label: "Ritmo", help: "Cuánto dura cada reloj: dibujar, mentir y votar.",
     options: [["normal", "Normal"], ["relajado", "Relajado"], ["tranquilo", "Tranquilo"]] },
-  { key: "rounds", label: "Rondas", help: "Cada ronda, todo el mundo dibuja una frase.",
-    options: [[1, "1"], [2, "2"], [3, "3"]] },
   { key: "spicy", label: "Frases gamberras", help: "Para adultos dispuestos a dibujar cosas difíciles de justificar.",
     options: [[false, "No"], [true, "Sí"]] },
   { key: "canvas", label: "Lienzo", help: "Clásico = sin deshacer ni goma: el error se queda, y de ahí sale media comedia.",
@@ -321,6 +322,7 @@ function startGame() {
   const upd = {};
   for (const p of sortedPlayers(state)) upd[`players/${p.uid}/score`] = 0;
   usedPrompts = new Set();
+  upd["settings/rounds"] = rondasPara(active().length);
   return startRound(1, upd);
 }
 
@@ -529,7 +531,8 @@ function renderLobbyPlayers() {
   if (wasDisabled && ok && document.activeElement === $("#exit")) $("#start").focus();
   $("#lobby-status").textContent = n < MIN_PLAYERS
     ? `Hacen falta al menos ${MIN_PLAYERS} jugadores (con 3 o más tiene mucha más gracia).`
-    : ok ? "Todo el mundo está listo. ¡Dale!" : "Esperando a que todos pulsen «¡Estoy listo!» en el móvil.";
+    : (ok ? "Todo el mundo está listo. ¡Dale!" : "Esperando a que todos pulsen «¡Estoy listo!» en el móvil.")
+      + ` Con ${n} jugadores: ${rondasPara(n)} ${rondasPara(n) === 1 ? "ronda" : "rondas"}, ${n * rondasPara(n)} dibujos.`;
 }
 
 function renderDrawing() {
