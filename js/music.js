@@ -12,6 +12,7 @@ const DUCK_VOL = 0.24;
 const FADE = 0.04;
 
 let ctx = null, master = null, duckGain = null;
+let muted = false;
 const buffers = {}, loading = {};
 let cur = null; // { key, kind, src, gain, t0, pos0, loop:[a,b]|null }
 let mode = "calma";
@@ -22,7 +23,7 @@ let pendingDrop = false, heardVoice = false, dropTimer = null, safetyTimer = nul
 function setup() {
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   master = ctx.createGain();
-  master.gain.value = MUSIC_VOL;
+  master.gain.value = muted ? 0 : MUSIC_VOL;
   duckGain = ctx.createGain();
   duckGain.connect(master).connect(ctx.destination);
 }
@@ -129,6 +130,11 @@ function clearDrop() {
 
 export const Music = {
   playing: false,
+  /** Silencio general: la música sigue corriendo (las letras siguen bailando a tempo), pero sin volumen. */
+  setMuted(m) {
+    muted = !!m;
+    if (master) master.gain.setTargetAtTime(muted ? 0 : MUSIC_VOL, ctx.currentTime, 0.08);
+  },
   start() {
     if (this.playing) return;
     if (!ctx) setup();

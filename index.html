@@ -12,7 +12,10 @@
 </head>
 <body class="host">
   <main id="app"></main>
-  <button class="corner left" id="fullscreen">Pantalla completa</button>
+  <div class="corner-row">
+    <button class="corner" id="fullscreen">Pantalla completa</button>
+    <button class="corner" id="mute" aria-pressed="false" title="Silenciar todo (tecla M)">🔊 Sonido</button>
+  </div>
   <button class="corner right" id="sound-hint">🔇 Toca aquí para activar el sonido</button>
   <script type="module" src="js/host.js"></script>
 </body>

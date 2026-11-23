@@ -63,7 +63,7 @@ document.addEventListener("pointerdown", unlockAudio);
 // Cada botón de la tele hace «pop» (y Jugar, su «ta-da»: lo pone su propio manejador).
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
-  if (!b || b.disabled || b.id === "play") return;
+  if (!b || b.disabled || b.id === "play" || b.id === "mute") return;
   Sfx.play("click");
 }, true);
 
@@ -91,8 +91,31 @@ if (soundBtn) {
   soundBtn.onclick = () => { unlockAudio(); };
   setInterval(() => { soundBtn.hidden = audioUnlocked; }, 500);
 }
-Voice.setEnabled(settings.voice);
-Sfx.setEnabled(settings.sfx !== false);
+// Silencio general (botón fijo abajo a la izquierda, o la tecla M). No toca los ajustes:
+// al quitarlo, vuelve lo que hubiera (música, voz y efectos según Ajustes).
+let muted = false;
+try { muted = localStorage.getItem("gt_muted") === "1"; } catch { /* sin almacenamiento */ }
+const muteBtn = $("#mute");
+function applySound() {
+  Music.setMuted(muted);
+  Voice.setEnabled(settings.voice && !muted);
+  Sfx.setEnabled(settings.sfx !== false && !muted);
+  if (muteBtn) {
+    muteBtn.textContent = muted ? "🔇 Sin sonido" : "🔊 Sonido";
+    muteBtn.setAttribute("aria-pressed", String(muted));
+    muteBtn.classList.toggle("off", muted);
+  }
+}
+function toggleMute() {
+  muted = !muted;
+  try { localStorage.setItem("gt_muted", muted ? "1" : "0"); } catch { /* da igual */ }
+  applySound();
+}
+if (muteBtn) muteBtn.onclick = (e) => { e.stopPropagation(); unlockAudio(); toggleMute(); };
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "m" || e.key === "M") && !e.target.closest?.("input, textarea")) toggleMute();
+});
+applySound();
 
 const nameOf = (uid) => state?.players?.[uid]?.name || "alguien";
 const active = () => sortedPlayers(state).filter((p) => p.connected !== false);
@@ -157,9 +180,8 @@ function showSettings() {
     settings[b.dataset.key] = JSON.parse(b.dataset.val);
     saveSettings();
     app.querySelectorAll(`.seg-btn[data-key="${b.dataset.key}"]`).forEach((x) => x.classList.toggle("on", x === b));
-    if (b.dataset.key === "voice") Voice.setEnabled(settings.voice);
     if (b.dataset.key === "music") settings.music ? Music.start() : Music.stop();
-    if (b.dataset.key === "sfx") Sfx.setEnabled(settings.sfx);
+    applySound();
   });
   $("#back").onclick = showMenu;
   app.querySelector(".seg-btn.on")?.focus();

@@ -277,6 +277,9 @@ img.avatar { border: 3px solid var(--pizarra); box-shadow: 3px 4px 0 -1px rgba(3
 .corner { position: fixed; bottom: 14px; z-index: 5; font: inherit; font-weight: 800; font-size: .95rem;
   background: rgba(32, 37, 58, .65); color: var(--lienzo); border: 0; border-radius: 999px; padding: .35rem 1rem; cursor: pointer; }
 .corner.left { left: 14px; }
+.corner-row { position: fixed; left: 14px; bottom: 14px; z-index: 6; display: flex; gap: .5rem; }
+.corner-row .corner { position: static; }
+#mute.off { background: rgba(178, 58, 99, .85); color: var(--lienzo-claro); }
 .corner.right { right: 14px; color: var(--oro); box-shadow: inset 0 0 0 2px rgba(228, 201, 90, .6); }
 .corner[hidden] { display: none; }
 .btn.small { font-size: 1rem; padding: .4em 1.1em .45em; margin-top: .6rem; }
