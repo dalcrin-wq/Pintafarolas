@@ -143,4 +143,14 @@ export const Music = {
   voiceIdle() {
     if (pendingDrop && heardVoice) this.party();
   },
+  /** Dónde está el ritmo ahora: para que las letras bailen a tempo.
+   *  phase: 0–1 dentro de un ciclo de 2 negras; intense: ya suena el bombo. */
+  groove() {
+    if (!ctx || !cur || !this.playing) return null;
+    const beat = 60 / BPM;
+    const p = positionAt(ctx.currentTime);
+    const into = (((p - TRACKS.sala.start) % (2 * beat)) + 2 * beat) % (2 * beat);
+    const intense = cur.mode === "fiesta" || (cur.mode === "ciclo" && p >= TRACKS.sala.drop - 0.05);
+    return { beat, phase: into / (2 * beat), intense };
+  },
 };

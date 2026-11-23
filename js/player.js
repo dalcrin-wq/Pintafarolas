@@ -2,6 +2,7 @@
 import { login, db, ref, set, update, onValue, serverTimestamp, onDisconnect, serverNow } from "./firebase.js";
 import { DrawPad } from "./pad.js";
 import { startPainter, setScene } from "./painter.js";
+import { startMotion } from "./motion.js";
 import { $, $$, esc, normalize, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 const TITLE = "Garabatrola";
@@ -347,4 +348,5 @@ setInterval(() => {
 }, 250);
 
 startPainter();
+startMotion();
 boot();

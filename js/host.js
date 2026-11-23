@@ -4,6 +4,7 @@ import { PROMPTS, SPICY_PROMPTS, HOUSE_LIES } from "./prompts.js";
 import { Voice } from "./voice.js";
 import { Music } from "./music.js";
 import { startPainter, setScene } from "./painter.js";
+import { startMotion } from "./motion.js";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -747,4 +748,5 @@ async function boot() {
 }
 
 startPainter();
+startMotion(() => Music.groove());
 boot();

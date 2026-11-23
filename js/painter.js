@@ -16,6 +16,8 @@ const RAMPS = {
   manana: ["#46606a", "#53787c", "#609488", "#7db182", "#b9cc3e", "#ded77e", "#ece6ac", "#f6f2da"],
   noche: ["#3b4866", "#475d7c", "#527590", "#5f8f98", "#a6b84a", "#e2b064", "#efd184", "#f6e9bc"],
   fiesta: ["#4c5e86", "#5a76a2", "#6698a4", "#88b67e", "#b9c245", "#eaa95e", "#f2d676", "#f8eec8"],
+  lavanda: ["#4f5a80", "#5f6c96", "#7082a8", "#8f9bc0", "#c98aa8", "#eab48a", "#f3d9a2", "#f8efd8"],
+  menta: ["#44626e", "#4f7a80", "#5c958e", "#78b09a", "#a9d06a", "#e6d58a", "#f1e6b6", "#f8f2dc"],
 };
 
 // Escena: luz (x, y en fracción de pantalla), alcance de la luz y rampa.
@@ -32,6 +34,18 @@ const SCENES = {
   end: { light: [0.5, 0.35], spread: 0.95, ramp: "fiesta" },
   locked: { light: [0.5, 0.3], spread: 0.7, ramp: "noche" },
 };
+
+// Cada pocos segundos el cuadro se repinta con otra paleta de la misma familia.
+const FAMILY = {
+  noche: ["noche", "lavanda", "menta"],
+  otros: ["tarde", "lavanda", "manana", "fiesta", "menta"],
+};
+function variantOf(sceneName, i) {
+  const scene = SCENES[sceneName] || SCENES.menu;
+  const fam = scene.ramp === "noche" ? FAMILY.noche : FAMILY.otros;
+  const rest = fam.filter((r) => r !== scene.ramp);
+  return i === 0 ? scene.ramp : rest[(i - 1) % rest.length];
+}
 
 /* ---------- utilidades ---------- */
 function rng(seed) {
@@ -66,15 +80,17 @@ function desat([r, g, b], k) {
 }
 
 /* ---------- el cuadro ---------- */
-function paint(canvas, sceneName, seed = 7) {
+function paint(canvas, sceneName, variant = 0) {
   const scene = SCENES[sceneName] || SCENES.menu;
-  const stops = RAMPS[scene.ramp].map(hex);
+  const stops = RAMPS[variantOf(sceneName, variant)].map(hex);
   const W = canvas.width, H = canvas.height;
   const ctx = canvas.getContext("2d");
-  const rand = rng(seed + sceneName.length * 101);
+  const rand = rng(7 + variant * 7919 + sceneName.length * 101);
   const noise = makeNoise(rand);
   const diag = Math.hypot(W, H);
-  const [lx, ly] = [scene.light[0] * W, scene.light[1] * H];
+  // La luz se mueve un poco en cada variante, como si pasara una nube.
+  const jx = variant ? (rand() - 0.5) * 0.16 : 0, jy = variant ? (rand() - 0.5) * 0.12 : 0;
+  const [lx, ly] = [(scene.light[0] + jx) * W, (scene.light[1] + jy) * H];
   const scale = Math.sqrt((W * H) / (1600 * 900));
 
   // Valor (cuánta luz) en cada punto: foco + manchas grandes de ruido.
@@ -219,30 +235,49 @@ export function startPainter() {
   document.body.prepend(layer);
 
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let current = null, painted = "", timer = null;
+  const CYCLE = 6500; // cada 6,5 s, otro cuadro parecido con otros colores
+  let current = null, painted = "", timer = null, variant = 0, lastSwap = 0;
+
+  const show = (scene, v) => {
+    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    const c = document.createElement("canvas");
+    c.width = Math.round(innerWidth * ratio);
+    c.height = Math.round(innerHeight * ratio);
+    paint(c, scene, v);
+    // Zoom lentísimo hacia un punto cercano a la luz (cada cuadro, el suyo).
+    const sc = SCENES[scene] || SCENES.menu;
+    c.style.transformOrigin = `${Math.round((sc.light[0] + (Math.random() - 0.5) * 0.3) * 100)}% ${Math.round((sc.light[1] + (Math.random() - 0.5) * 0.3) * 100)}%`;
+    if (!current) c.style.transition = "none"; // el primer cuadro sale ya pintado
+    layer.appendChild(c);
+    const old = current;
+    current = c;
+    lastSwap = performance.now();
+    requestAnimationFrame(() => {
+      c.classList.add("on");
+      if (old) setTimeout(() => old.remove(), reduce ? 0 : 2600);
+    });
+  };
 
   const repaint = () => {
     const scene = document.body.dataset.scene || "menu";
     const size = `${innerWidth}x${innerHeight}`;
     if (`${scene}@${size}` === painted) return;
+    if (!painted.startsWith(`${scene}@`)) variant = 0; // escena nueva: empieza por su paleta
     painted = `${scene}@${size}`;
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
-    const c = document.createElement("canvas");
-    c.width = Math.round(innerWidth * ratio);
-    c.height = Math.round(innerHeight * ratio);
-    paint(c, scene);
-    layer.appendChild(c);
-    const old = current;
-    current = c;
-    requestAnimationFrame(() => {
-      c.classList.add("on");
-      if (old) setTimeout(() => old.remove(), reduce ? 0 : 900);
-    });
+    show(scene, variant);
   };
 
   new MutationObserver(repaint).observe(document.body, { attributes: true, attributeFilter: ["data-scene"] });
   addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(repaint, 250); });
   repaint();
+
+  if (!reduce) {
+    setInterval(() => {
+      if (document.hidden || performance.now() - lastSwap < CYCLE - 200) return;
+      variant++;
+      show(document.body.dataset.scene || "menu", variant);
+    }, 500);
+  }
 }
 
 /** Cambia la escena del cuadro (menu, lobby, drawing, voting…). */
