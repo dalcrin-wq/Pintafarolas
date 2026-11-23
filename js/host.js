@@ -23,7 +23,9 @@ const MIN_PLAYERS = 2;
 const rondasPara = (n) => (n <= 3 ? 3 : n <= 6 ? 2 : 1);
 const MAX_PLAYERS = 10;
 // El destape, por actos (ms). Ver revealPlan().
-const RV = { intro: 2600, fuera: 4800, lie: 6200, truth: 6800, points: 4800, sum: 8000 };
+// Cada mentira que coló y la verdad llevan redoble delante (REDOBLE ms) antes de saltar al centro.
+const REDOBLE = 2600;
+const RV = { intro: 1900, fuera: 3400, lie: 6200, truth: 7000, points: 3600, sum: 5400 };
 
 const app = $("#app");
 let settings = loadSettings();
@@ -298,7 +300,7 @@ function onEnterPhase() {
       break;
     }
     case "voting": Voice.say("votar", { interrupt: true }); break;
-    case "reveal": Music.play("intriga"); runReveal(); break;
+    case "reveal": Music.play("fiesta"); runReveal(); break;
     // Marcador y final: música de fiesta (la voz la baja mientras habla).
     case "scores": Music.play("fiesta"); Sfx.play("aplausos"); Voice.say("marcador", { interrupt: true }); break;
     case "end": Music.play("fiesta"); break; // la gala (renderEnd) pone voz y efectos
@@ -879,27 +881,7 @@ function repintar(cv, json) {
 }
 
 function renderReveal() {
-  const s = state;
-  const opts = Object.values(s.results?.opts || {});
-  app.innerHTML = `
-    <section class="stage judge destape">
-      <header class="stage-head"><h2>El destape <small>Dibujo ${s.current.index} de ${s.current.total}</small></h2></header>
-      <div class="judge-body">
-        ${artworkHTML()}
-        <div class="judge-side">
-          <ol class="options reveal-opts">${opts.map((o) => `
-            <li data-id="${o.id}">
-              <span class="opt-text">${esc(o.text)}</span>
-              <span class="opt-voters"></span>
-              <span class="stamp"></span>
-              <span class="gain-badge"></span>
-              <span class="burst"></span>
-            </li>`).join("")}
-          </ol>
-          <p class="reveal-caption" id="reveal-caption"></p>
-        </div>
-      </div>
-    </section>`;
+  app.innerHTML = mesaHTML({ voting: true, reveal: true });
 }
 
 function clearReveal() {
@@ -911,11 +893,16 @@ function runReveal() {
   clearReveal();
   const r = state.results;
   if (!r?.opts) return;
-  Voice.say("suspense", { interrupt: true });
   const pid = state.phaseId;
   const plan = revealPlan(r);
   // Si la tele se recarga a mitad de destape, se retoma por el acto que toca.
   const elapsed = Math.max(0, plan.total - Math.max(0, (state.deadline || 0) - serverNow()) - 500);
+  // Arranque: el dibujo encoge y baja para dejar sitio a las tarjetas.
+  if (elapsed < 600) {
+    Sfx.play("tic");
+    Voice.say("suspense", { interrupt: true });
+    revealTimers.push(setTimeout(() => { app.querySelector(".mesa")?.classList.add("encoge"); Sfx.play("revelar"); }, 450));
+  } else app.querySelector(".mesa")?.classList.add("encoge");
   for (const st of plan.steps) {
     const wait = st.at - elapsed;
     if (wait < -800 && st.act !== "sum") { revealTimers.push(setTimeout(() => replayStep(st, pid), 0)); continue; }
@@ -940,24 +927,40 @@ function playStep(st) {
       return Voice.say(st.list.some((o) => o.kind === "house") && st.list.length === 1 ? "casa" : "nadiePico", { interrupt: true });
     }
     case "lie": {
-      markLie(st.o);
-      const n = st.o.voters.length;
-      const ms = Sfx.play("picado");
-      const pid = state.phaseId;
-      caption(n === 1 ? `${nameOf(st.o.voters[0])} ha picado.` : `Han picado ${n}.`);
-      return setTimeout(() => {
-        if (state?.phaseId !== pid) return;
-        Voice.say(st.o.kind === "house" ? "casa" : n >= 2 ? "coloMuchos" : "colo", { interrupt: true });
-      }, Math.min(ms || 0, 2000));
+      const li = optEl(st.o);
+      li?.classList.add("tension");
+      Sfx.play("redoble");
+      caption("¿Quién habrá picado con esta?");
+      return later2(REDOBLE, () => {
+        li?.classList.remove("tension");
+        markLie(st.o);
+        const n = st.o.voters.length;
+        caption(n === 1 ? `${nameOf(st.o.voters[0])} ha picado.` : `Han picado ${n}.`);
+        later2(650, () => { Sfx.play("fallo"); Sfx.play("picado", { vol: 0.6 }); });
+        later2(1000, () => Sfx.play("puntos"));
+        later2(1050, () => Voice.say(st.o.kind === "house" ? "casa" : n >= 2 ? "coloMuchos" : "colo", { interrupt: true }));
+        later2(RV.lie - REDOBLE - 500, () => soltar(li));
+      });
     }
     case "truth": {
-      markTruth(st.o);
-      const n = st.o.voters.length;
-      const judges = active().filter((p) => p.uid !== state.current?.artist).length;
-      caption(n ? `Lo dibujó ${nameOf(state.current.artist)}.` : "No la acertó nadie.");
-      return Voice.say(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad", { interrupt: true });
+      const li = optEl(st.o);
+      app.querySelectorAll(".mesa .opcion").forEach((x) => x !== li && x.classList.add("apagada"));
+      li?.classList.add("tension");
+      Sfx.play("redoble");
+      caption("Y el título de verdad es…");
+      return later2(REDOBLE, () => {
+        li?.classList.remove("tension");
+        markTruth(st.o);
+        const n = st.o.voters.length;
+        const judges = active().filter((p) => p.uid !== state.current?.artist).length;
+        caption(n ? `Lo dibujó ${nameOf(state.current.artist)}.` : `Lo dibujó ${nameOf(state.current.artist)}. Y no lo acertó nadie.`);
+        Sfx.play("revelar");
+        later2(500, () => Sfx.play(n ? "acierto" : "fallo"));
+        if (n) { later2(900, () => Sfx.play("puntos")); later2(1100, () => Sfx.play("aplausos", { vol: 0.7 })); }
+        later2(300, () => Voice.say(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad", { interrupt: true }));
+      });
     }
-    case "points": Music.play("fiesta"); setScene("scores"); return renderPoints();
+    case "points": setScene("scores"); return renderPoints();
     case "sum": return runSum();
   }
 }
@@ -971,7 +974,25 @@ function caption(text) {
   c.classList.add("pop");
 }
 
-const optEl = (o) => app.querySelector(`.reveal-opts li[data-id="${o?.id}"]`);
+const optEl = (o) => app.querySelector(`.mesa .opcion[data-id="${o?.id}"]`);
+
+// Lleva una tarjeta al centro de la mesa, en grande.
+function alCentro(li) {
+  const box = app.querySelector(".mesa-cuerpo");
+  if (!li || !box) return;
+  const a = li.getBoundingClientRect(), b = box.getBoundingClientRect();
+  li.style.setProperty("--dx", `${b.left + b.width / 2 - (a.left + a.width / 2)}px`);
+  li.style.setProperty("--dy", `${b.top + b.height * 0.36 - (a.top + a.height / 2)}px`);
+  li.classList.add("foco");
+}
+function soltar(li) { li?.classList.remove("foco"); }
+
+// El autor sale en la cartela cuando se descubre la verdad.
+function firmar() {
+  const a = state.players?.[state.current?.artist];
+  const c = app.querySelector(".c-autor");
+  if (c && a) { c.innerHTML = `${avatarHTML(a, "tiny")} ${esc(a.name)}`; c.classList.add("firmada"); }
+}
 function votersHTML(o, delay = 0.25) {
   return o.voters.map((u, i) => {
     const p = state.players?.[u];
@@ -999,25 +1020,27 @@ function markOut(o, still = false) {
 function markLie(o, still = false) {
   const li = optEl(o);
   if (!li) return;
-  app.querySelectorAll(".reveal-opts li").forEach((x) => x.classList.toggle("apagada", x !== li && !x.classList.contains("fuera")));
-  const who = o.kind === "house" ? "Mentira de la casa" : `Mentira de ${(o.authors || []).map(nameOf).join(" y ")}`;
-  li.querySelector(".opt-voters").innerHTML = votersHTML(o);
+  const who = o.kind === "house" ? "la mentira de la casa" : `la mentira de ${(o.authors || []).map(nameOf).join(" y ")}`;
+  li.querySelector(".opt-voters").innerHTML = votersHTML(o, 0.35);
   li.querySelector(".stamp").textContent = who;
   li.querySelector(".gain-badge").textContent = o.kind === "house" ? "" : `+${500 * o.voters.length}`;
-  li.classList.add("mentira", "foco");
-  if (still) li.classList.add("still");
-  setTimeout(() => li.classList.remove("foco"), still ? 0 : RV.lie - 600);
+  li.classList.add("mentira");
+  if (still) { li.classList.add("still"); return; }
+  alCentro(li);
 }
 
 function markTruth(o, still = false) {
   const li = optEl(o);
   if (!li) return;
-  app.querySelectorAll(".reveal-opts li").forEach((x) => x.classList.toggle("apagada", x !== li));
-  li.querySelector(".opt-voters").innerHTML = votersHTML(o);
-  li.querySelector(".stamp").textContent = "¡La verdad!";
-  li.querySelector(".gain-badge").textContent = o.voters.length ? `+1000 c/u · +${500 * o.voters.length} al artista` : "0";
-  li.classList.add("verdad", "foco");
-  if (still) li.classList.add("still");
+  app.querySelectorAll(".mesa .opcion").forEach((x) => x !== li && x.classList.add("apagada"));
+  li.querySelector(".opt-voters").innerHTML = votersHTML(o, 0.45);
+  li.querySelector(".stamp").textContent = "el título de verdad";
+  li.querySelector(".gain-badge").textContent = o.voters.length ? `+1000 c/u` : "";
+  if (!li.querySelector(".rayos")) li.insertAdjacentHTML("afterbegin", `<span class="rayos" aria-hidden="true"></span>`);
+  li.classList.add("verdad");
+  firmar();
+  if (still) { li.classList.add("still"); return; }
+  alCentro(li);
 }
 
 /* --- Puntos de este dibujo → clasificación general --- */
@@ -1026,25 +1049,48 @@ function pointsRows() {
   return sortedPlayers(state).map((p) => ({ p, gain: r.gains?.[p.uid] || 0, prev: r.prev?.[p.uid] ?? Math.max(0, (p.score || 0) - (r.gains?.[p.uid] || 0)) }));
 }
 
+// Por qué ha ganado puntos cada uno con este dibujo.
+function motivos(uid) {
+  const r = state.results;
+  const opts = Object.values(r?.opts || {}).map((o) => ({ ...o, voters: Object.values(o.voters || {}), authors: Object.values(o.authors || {}) }));
+  const m = [];
+  if (uid === state.current?.artist && opts.find((o) => o.kind === "truth")?.voters.length) m.push("lo dibujó");
+  if (opts.find((o) => o.kind === "truth")?.voters.includes(uid)) m.push("acertó");
+  for (const o of opts) if (o.kind === "lie" && o.voters.length && o.authors.includes(uid)) m.push(`«${o.text}»`);
+  return m.join(" + ");
+}
+
 function renderPoints(still = false) {
   const r = state.results;
   const rows = pointsRows().sort((a, b) => (b.gain - a.gain) || a.p.name.localeCompare(b.p.name));
-  const puesto = (g) => 1 + rows.filter((x) => x.gain > g).length;
+  const max = Math.max(1, ...rows.map((x) => x.gain));
   const title = r.last ? `Fin de la ronda ${r.round} de ${r.rounds}` : `Dibujo ${state.current.index} de ${state.current.total}`;
   app.innerHTML = `
-    <section class="stage marcador">
-      <header class="stage-head"><h2 id="board-title">Puntos de este dibujo <small>${title}</small></h2></header>
-      <div class="board" id="board">${rows.map(({ p, gain, prev }, i) => `
-        <div class="brow" data-uid="${p.uid}" style="animation-delay:${(i * 0.09).toFixed(2)}s">
-          <span class="pos">${puesto(gain)}</span>${avatarHTML(p, "tiny")}
-          <span class="pname">${esc(p.name)}</span>
-          <span class="gain ${gain ? "" : "cero"}" data-gain="${gain}">${still ? `+${gain}` : "+0"}</span>
-          <span class="move"></span>
-          <span class="score" data-prev="${prev}">${prev}</span>
-        </div>`).join("")}
+    <section class="stage marcador hoja-puntos">
+      <div class="hp-papel">
+        <figure class="hp-obra"><img src="${safeImg(state.drawings?.[state.current.artist])}" alt=""><figcaption>${esc(state.prompts?.[state.current.artist] || "")}</figcaption></figure>
+        <div class="hp-der">
+          <h2 id="board-title">Este dibujo ha dado <small>${title}</small></h2>
+          <div class="board" id="board">${rows.map(({ p, gain, prev }, i) => `
+            <div class="hp-fila" data-uid="${p.uid}" style="--h:${hue(p.uid)}; --i:${i}">
+              <span class="pos"></span>${avatarHTML(p, "tiny")}<span class="pname">${esc(p.name)}</span>
+              <div class="hp-barra ${gain ? "" : "cero"}"><i style="--w:${gain ? Math.max(14, (100 * gain) / max) : 6}%"></i>
+                <span class="hp-motivo">${esc(motivos(p.uid))}</span>
+                <span class="gain" data-gain="${gain}">${still || !gain ? `+${gain}` : "+0"}</span></div>
+              <span class="score" data-prev="${prev}" hidden>${prev}</span>
+            </div>`).join("")}
+          </div>
+        </div>
       </div>
     </section>`;
-  if (!still) app.querySelectorAll(".gain").forEach((el, i) => setTimeout(() => countUp(el, 0, +el.dataset.gain, 900, "+"), 350 + i * 120));
+  if (still) { app.querySelectorAll(".hp-fila").forEach((f) => f.classList.add("vivo")); return; }
+  Sfx.play("puntos");
+  app.querySelectorAll(".hp-fila").forEach((f, i) => later2(450 + i * 180, () => {
+    f.classList.add("vivo");
+    Sfx.play("pop");
+    const g = f.querySelector(".gain");
+    if (+g.dataset.gain) countUp(g, 0, +g.dataset.gain, 700, "+");
+  }));
 }
 
 function countUp(el, from, to, ms, prefix = "") {
@@ -1067,45 +1113,48 @@ function runSum() {
   const before = rank("prev");
   rows.forEach((x) => { x.total = x.prev + x.gain; });
   const after = rank("total");
-  // Puesto con empates: 1, 1, 3…
   const puesto = (key, v) => 1 + rows.filter((y) => y[key] > v).length;
+  const maxT = Math.max(1, ...rows.map((x) => x.total));
   const t = $("#board-title");
-  if (t) t.removeAttribute("data-dance");
-  if (t) t.innerHTML = `La clasificación <small>${r.last ? `Fin de la ronda ${r.round} de ${r.rounds}` : `Tras el dibujo ${state.current.index} de ${state.current.total}`}</small>`;
-  Sfx.play("aplausos");
-  // 1) Los puntos del dibujo «vuelan» a la puntuación total.
-  board.querySelectorAll(".brow").forEach((row) => {
+  if (t) t.innerHTML = `Así va la cosa <small>${r.last ? `Fin de la ronda ${r.round} de ${r.rounds}` : `Tras el dibujo ${state.current.index} de ${state.current.total}`}</small>`;
+  app.querySelector(".hoja-puntos")?.classList.add("totales");
+  Sfx.play("revelar");
+  Sfx.play("aplausos", { vol: 0.6 });
+  // 1) Las barras pasan de «lo de este dibujo» a «lo que lleva cada uno».
+  board.querySelectorAll(".hp-fila").forEach((row) => {
     const x = rows.find((y) => y.p.uid === row.dataset.uid);
-    row.querySelector(".gain").classList.add("sumando");
-    countUp(row.querySelector(".score"), x.prev, x.total, 1300);
+    row.querySelector(".hp-barra i").style.setProperty("--w", `${Math.max(6, (100 * x.total) / maxT)}%`);
+    row.querySelector(".hp-barra").classList.remove("cero");
+    row.querySelector(".hp-motivo").textContent = "";
+    countUp(row.querySelector(".gain"), x.prev, x.total, 1100);
   });
-  // 2) Las filas se recolocan según la nueva clasificación (FLIP), con flechas y corona.
-  setTimeout(() => {
+  // 2) Se reordenan (FLIP), con puesto, flechas y corona.
+  later2(1300, () => {
     if (!board.isConnected) return;
     const first = new Map([...board.children].map((el) => [el.dataset.uid, el.getBoundingClientRect().top]));
     const top = rows.find((y) => y.p.uid === after[0]);
     const soloEnCabeza = top.total > 0 && rows.filter((y) => y.total === top.total).length === 1;
     after.forEach((uid) => board.appendChild(board.querySelector(`[data-uid="${uid}"]`)));
-    [...board.children].forEach((el, i) => {
+    const hayHistoria = rows.some((y) => y.prev > 0);
+    [...board.children].forEach((el) => {
       const dy = first.get(el.dataset.uid) - el.getBoundingClientRect().top;
       if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }], { duration: 700, easing: "cubic-bezier(.3,1.3,.5,1)" });
       const x = rows.find((y) => y.p.uid === el.dataset.uid);
       const now = puesto("total", x.total), was = puesto("prev", x.prev);
-      el.querySelector(".pos").textContent = now;
-      const mv = el.querySelector(".move");
-      const hayHistoria = rows.some((y) => y.prev > 0); // en el primer reparto nadie «baja»
-      mv.textContent = !hayHistoria ? "" : was > now ? `▲${was - now}` : was < now ? `▼${now - was}` : "";
-      mv.className = `move ${!hayHistoria ? "" : was > now ? "sube" : was < now ? "baja" : ""}`;
+      el.querySelector(".pos").textContent = `${now}.º`;
+      el.classList.toggle("sube", hayHistoria && was > now);
       el.classList.toggle("lider", now === 1 && soloEnCabeza);
     });
+    Sfx.play("pop");
     const antes = rows.find((y) => y.p.uid === before[0]);
     const lideraba = antes.prev > 0 && rows.filter((y) => y.prev === antes.prev).length === 1 ? antes.p.uid : null;
-    const newLeader = soloEnCabeza && top.p.uid !== lideraba && rows.some((y) => y.prev > 0);
+    const newLeader = soloEnCabeza && top.p.uid !== lideraba && hayHistoria;
     if (newLeader) {
       board.querySelector(".lider")?.classList.add("nuevo");
+      Sfx.play("fanfarria", { vol: 0.8 });
       Voice.say("lider", { interrupt: true });
     } else if (r.last) Voice.say("marcador", { interrupt: true });
-  }, 1700);
+  });
 }
 
 function boardHTML(list, offset = 0) {

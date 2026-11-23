@@ -560,3 +560,61 @@ body.player { padding: .9rem; }
 .descubre { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; backdrop-filter: blur(4px); background: rgba(236, 226, 182, .3); }
 .descubre[hidden] { display: none; }
 .descubre.fuera { animation: sale-reparto .45s ease-in forwards; }
+
+/* ---------- El destape sobre la mesa ---------- */
+.mesa.destapando .centro { transition: transform .8s cubic-bezier(.5, 0, .3, 1); transform-origin: 50% 100%; }
+.mesa.encoge .centro { transform: translateY(18vh) scale(.42); }
+.mesa.destapando .mesa-cuerpo { position: relative; min-height: 62vh; }
+.mesa .opcion.tension { animation: tension .32s ease-in-out infinite alternate; z-index: 4; }
+@keyframes tension { from { transform: rotate(-1.6deg) scale(1.03); } to { transform: rotate(1.6deg) scale(1.06); } }
+.mesa .opcion.foco { transform: translate(var(--dx, 0), var(--dy, 0)) scale(1.32) rotate(-1deg); z-index: 10; }
+.mesa .opcion.apagada:not(.foco) { opacity: .45; filter: saturate(.4); }
+.mesa .opcion.fuera { animation: tiembla .45s ease-in-out, cae .9s .9s ease-in forwards; }
+.mesa .opcion.ida { display: none; }
+.mesa .opcion .stamp { position: absolute; top: -.95rem; left: .9rem; font-size: .42em; font-family: Nunito, sans-serif; font-weight: 900; padding: .12rem .6rem;
+  border-radius: 6px; background: var(--oro); color: var(--tinta); transform: rotate(-3deg); box-shadow: 2px 3px 0 rgba(30, 34, 64, .4); animation: sello .35s cubic-bezier(.2, 1.8, .5, 1) both; }
+.mesa .opcion.fuera .stamp { background: var(--niebla); color: var(--lienzo-claro); }
+.mesa .opcion.mentira::before { background: linear-gradient(150deg, rgba(255, 214, 220, .9), rgba(217, 87, 127, .3) 70%, rgba(80, 70, 140, .3)), var(--paper-tex, none), var(--lienzo); }
+.mesa .opcion.verdad::before { background: linear-gradient(150deg, rgba(232, 246, 170, .98), rgba(150, 200, 60, .75) 60%, rgba(61, 128, 136, .5)), var(--paper-tex, none), var(--lienzo); }
+.mesa .opcion.verdad .stamp { background: var(--lima-oscura); color: var(--lienzo-claro); }
+.rayos { position: absolute; left: 50%; top: 50%; width: 240%; aspect-ratio: 1; z-index: -2; pointer-events: none; transform: translate(-50%, -50%);
+  background: repeating-conic-gradient(from 0deg, rgba(240, 205, 80, .7) 0 7deg, transparent 7deg 24deg); border-radius: 50%;
+  -webkit-mask: radial-gradient(circle, #000 25%, transparent 68%); mask: radial-gradient(circle, #000 25%, transparent 68%); animation: gira 9s linear infinite, pop .5s ease-out; }
+@keyframes gira { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.mesa .opcion .gain-badge { position: absolute; right: -.6rem; bottom: -.9rem; font-family: var(--display); font-size: .5em; padding: .1rem .6rem; border-radius: 99px;
+  background: var(--oro); color: var(--tinta); box-shadow: 2px 3px 0 rgba(30, 34, 64, .4); animation: sello .4s .9s cubic-bezier(.2, 1.8, .5, 1) both; }
+.mesa .opcion .opt-voters { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: center; font-size: .42em; margin-top: .5rem; clear: both; }
+.c-autor.firmada { animation: pop .5s cubic-bezier(.2, 1.7, .5, 1); }
+.mesa .reveal-caption { text-align: center; font-size: clamp(1.4rem, 2.6vw, 2.2rem); margin-top: auto; }
+@media (prefers-reduced-motion: reduce) { .rayos, .mesa .opcion.tension { animation: none; } }
+
+/* ---------- Puntos del dibujo → así va la cosa ---------- */
+.hoja-puntos { display: grid; place-items: center; }
+.hp-papel { width: min(1400px, 100%); display: grid; grid-template-columns: minmax(220px, 30%) 1fr; gap: clamp(1.4rem, 3vw, 3rem); align-items: center;
+  padding: clamp(1.4rem, 3vw, 2.6rem); border-radius: 18px; color: var(--tinta); animation: entra-premio .6s cubic-bezier(.2, 1.3, .5, 1) both;
+  background: var(--paper-tex, none), linear-gradient(165deg, #fbf6df, #efe4bd 70%, #dccb9c); box-shadow: 12px 16px 0 -2px rgba(30, 34, 64, .5); }
+.hp-obra { margin: 0; transform: rotate(-2deg); }
+.hp-obra img { width: 100%; aspect-ratio: 1; display: block; background: #fff; box-shadow: 0 0 0 4px #3a3150, 7px 9px 0 rgba(30, 34, 64, .4); }
+.hp-obra figcaption { margin-top: .9rem; text-align: center; font-weight: 900; font-size: clamp(1rem, 1.6vw, 1.4rem); }
+.hp-der h2 { font-size: clamp(2rem, 4vw, 3.4rem); color: var(--indigo); margin: 0 0 1rem; text-shadow: none; }
+.hp-der h2 small { display: block; font-size: .38em; color: var(--niebla); font-family: Nunito, sans-serif; font-weight: 800; }
+.hp-fila { display: grid; grid-template-columns: 3.2rem 44px 8rem 1fr; gap: .8rem; align-items: center; margin-bottom: .8rem; opacity: 0; transform: translateX(-30px); transition: opacity .35s, transform .45s cubic-bezier(.2, 1.5, .5, 1); }
+.hp-fila.vivo { opacity: 1; transform: none; }
+.hp-fila .avatar.tiny { width: 44px; height: 44px; }
+.hp-fila .pname { font-weight: 900; font-size: clamp(1.1rem, 1.8vw, 1.6rem); }
+.hp-fila .pos { font-family: var(--display); font-size: 1.5rem; color: var(--indigo); position: relative; }
+.hp-fila.lider .pos::before { content: "👑"; position: absolute; left: -.2rem; top: -1.3rem; font-size: 1.2rem; animation: pop .5s cubic-bezier(.2, 1.7, .5, 1); }
+.hp-fila.sube .pname::after { content: " ▲"; color: var(--lima-oscura); }
+.hp-fila.nuevo { animation: nuevo-lider 1.2s ease-out; }
+@keyframes nuevo-lider { 30% { transform: scale(1.06); } }
+.hp-barra { position: relative; height: clamp(2.2rem, 4vh, 3rem); display: flex; align-items: center; }
+.hp-barra i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 8px; background: hsl(var(--h) 70% 62%);
+  box-shadow: 3px 4px 0 rgba(30, 34, 64, .3); transition: width .9s cubic-bezier(.3, 1.2, .5, 1), background .6s; }
+.hp-fila.vivo .hp-barra i { width: var(--w); }
+.hp-barra.cero i { background: rgba(93, 100, 120, .25); box-shadow: none; }
+.hp-motivo { position: relative; padding-left: .8rem; font-weight: 800; font-size: clamp(.9rem, 1.3vw, 1.15rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+.hp-barra .gain { position: relative; margin-left: auto; padding-right: .3rem; font-family: var(--display); font-size: clamp(1.3rem, 2.2vw, 2rem); color: var(--tinta); }
+.hoja-puntos.totales .hp-barra i { background: linear-gradient(90deg, #3b3f66, #262a40); }
+.hoja-puntos.totales .hp-barra .gain { color: var(--lienzo-claro); }
+.hoja-puntos.totales .hp-fila.lider .hp-barra i { background: linear-gradient(90deg, #e9c15f, #de8f5f); }
+.hoja-puntos.totales .hp-fila.lider .hp-barra .gain { color: var(--tinta); }
