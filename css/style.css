@@ -468,9 +468,9 @@ body.player { padding: .9rem; }
 /* ---------- Dibujar: tendedero ---------- */
 .dibujo { display: flex; flex-direction: column; align-items: center; gap: .4rem; position: relative; overflow: hidden; }
 .dib-head { position: relative; width: 100%; text-align: center; }
-.dib-ronda { margin: 0; font-weight: 900; color: var(--rosa); text-shadow: var(--halo); letter-spacing: .04em; }
+.dib-ronda { margin: 0; font-weight: 900; font-size: clamp(1rem, 1.6vw, 1.4rem); color: var(--rosa); text-shadow: var(--halo); letter-spacing: .04em; }
 .dib-head h2 { font-size: clamp(2.4rem, 5vw, 4.2rem); color: var(--indigo); text-shadow: var(--halo), 4px 5px 0 rgba(59, 63, 102, .25); margin: 0; min-height: 1.2em; }
-.dib-head h2 .nom { color: hsl(var(--h) 62% 42%); }
+.dib-head h2 .nom { color: hsl(var(--h) 62% 34%); }
 .dib-head .timer { position: absolute; right: 0; top: 0; }
 .tendedero { position: relative; width: min(1500px, 100%); margin-top: 1.2rem; }
 .cuerda { position: absolute; left: -3%; width: 106%; top: 0; height: 64px; overflow: visible; }
@@ -548,7 +548,7 @@ body.player { padding: .9rem; }
 .opcion.aparece { animation: aparece .45s cubic-bezier(.2, 1.7, .5, 1) both; }
 @keyframes aparece { from { opacity: 0; transform: scale(.5) rotate(-8deg); } }
 .opcion .opt-voters:empty, .opcion .stamp:empty, .opcion .gain-badge:empty { display: none; }
-.mesa-pie { display: flex; flex-direction: column; align-items: center; gap: .5rem; margin-top: 1.4rem; transition: opacity .4s; }
+.mesa-pie { display: flex; flex-direction: column; align-items: center; gap: .5rem; margin-top: 2.8rem; transition: opacity .4s; }
 .cuenta { margin: 0; font-weight: 800; text-shadow: var(--halo); }
 .cuenta b { color: var(--rosa); }
 .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; }
@@ -567,7 +567,7 @@ body.player { padding: .9rem; }
 .mesa.destapando .mesa-cuerpo { position: relative; min-height: 62vh; }
 .mesa .opcion.tension { animation: tension .32s ease-in-out infinite alternate; z-index: 4; }
 @keyframes tension { from { transform: rotate(-1.6deg) scale(1.03); } to { transform: rotate(1.6deg) scale(1.06); } }
-.mesa .opcion.foco { transform: translate(var(--dx, 0), var(--dy, 0)) scale(1.32) rotate(-1deg); z-index: 10; }
+.mesa .opcion.foco { transform: translate(var(--dx, 0), var(--dy, 0)) scale(1.2) rotate(-1deg); z-index: 10; }
 .mesa .opcion.apagada:not(.foco) { opacity: .45; filter: saturate(.4); }
 .mesa .opcion.fuera { animation: tiembla .45s ease-in-out, cae .9s .9s ease-in forwards; }
 .mesa .opcion.ida { display: none; }
@@ -603,7 +603,7 @@ body.player { padding: .9rem; }
 .hp-fila .avatar.tiny { width: 44px; height: 44px; }
 .hp-fila .pname { font-weight: 900; font-size: clamp(1.1rem, 1.8vw, 1.6rem); }
 .hp-fila .pos { font-family: var(--display); font-size: 1.5rem; color: var(--indigo); position: relative; }
-.hp-fila.lider .pos::before { content: "👑"; position: absolute; left: -.2rem; top: -1.3rem; font-size: 1.2rem; animation: pop .5s cubic-bezier(.2, 1.7, .5, 1); }
+.hp-fila.lider .pos::before { content: "♛"; position: absolute; left: .1rem; top: -1.15rem; font-size: 1.4rem; color: #d8a93a; text-shadow: 1px 2px 0 rgba(30, 34, 64, .4); animation: pop .5s cubic-bezier(.2, 1.7, .5, 1); }
 .hp-fila.sube .pname::after { content: " ▲"; color: var(--lima-oscura); }
 .hp-fila.nuevo { animation: nuevo-lider 1.2s ease-out; }
 @keyframes nuevo-lider { 30% { transform: scale(1.06); } }
@@ -615,6 +615,6 @@ body.player { padding: .9rem; }
 .hp-motivo { position: relative; padding-left: .8rem; font-weight: 800; font-size: clamp(.9rem, 1.3vw, 1.15rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
 .hp-barra .gain { position: relative; margin-left: auto; padding-right: .3rem; font-family: var(--display); font-size: clamp(1.3rem, 2.2vw, 2rem); color: var(--tinta); }
 .hoja-puntos.totales .hp-barra i { background: linear-gradient(90deg, #3b3f66, #262a40); }
-.hoja-puntos.totales .hp-barra .gain { color: var(--lienzo-claro); }
+
 .hoja-puntos.totales .hp-fila.lider .hp-barra i { background: linear-gradient(90deg, #e9c15f, #de8f5f); }
-.hoja-puntos.totales .hp-fila.lider .hp-barra .gain { color: var(--tinta); }
+

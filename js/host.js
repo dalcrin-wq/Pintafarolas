@@ -858,7 +858,8 @@ function repintar(cv, json) {
     for (let j = 2; j < pts.length; j += 2) ev.push({ color, w: width * k, x0: pts[j - 2] * k, y0: pts[j - 1] * k, x: pts[j] * k, y: pts[j + 1] * k });
   }
   if (!ev.length) { pintarFinal(cv); return 400; }
-  const dur = Math.min(2400, Math.max(700, ev.length * 8));
+  const nTrazos = ev.filter((e) => e.start).length;
+  const dur = Math.min(2600, Math.max(800, nTrazos * 240, ev.length * 6));
   const t0 = performance.now(), pid = state.phaseId;
   let done = 0, lastSfx = -1e9;
   const step = (now) => {
@@ -982,7 +983,7 @@ function alCentro(li) {
   if (!li || !box) return;
   const a = li.getBoundingClientRect(), b = box.getBoundingClientRect();
   li.style.setProperty("--dx", `${b.left + b.width / 2 - (a.left + a.width / 2)}px`);
-  li.style.setProperty("--dy", `${b.top + b.height * 0.36 - (a.top + a.height / 2)}px`);
+  li.style.setProperty("--dy", `${b.top + b.height * 0.42 - (a.top + a.height / 2)}px`);
   li.classList.add("foco");
 }
 function soltar(li) { li?.classList.remove("foco"); }
