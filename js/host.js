@@ -826,8 +826,9 @@ function runSum() {
       const now = puesto("total", x.total), was = puesto("prev", x.prev);
       el.querySelector(".pos").textContent = now;
       const mv = el.querySelector(".move");
-      mv.textContent = was > now ? `▲${was - now}` : was < now ? `▼${now - was}` : "";
-      mv.className = `move ${was > now ? "sube" : was < now ? "baja" : ""}`;
+      const hayHistoria = rows.some((y) => y.prev > 0); // en el primer reparto nadie «baja»
+      mv.textContent = !hayHistoria ? "" : was > now ? `▲${was - now}` : was < now ? `▼${now - was}` : "";
+      mv.className = `move ${!hayHistoria ? "" : was > now ? "sube" : was < now ? "baja" : ""}`;
       el.classList.toggle("lider", now === 1 && soloEnCabeza);
     });
     const antes = rows.find((y) => y.p.uid === before[0]);
