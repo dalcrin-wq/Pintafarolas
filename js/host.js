@@ -5,7 +5,7 @@ import { Voice } from "./voice.js";
 import { Music } from "./music.js";
 import { Sfx } from "./sfx.js";
 import { startPainter, setScene } from "./painter.js";
-import { startMotion } from "./motion.js";
+import { startMotion, refreshGradients } from "./motion.js";
 import { computeAwards } from "./awards.js";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
@@ -1007,6 +1007,7 @@ function runPodium() {
   const fin = $("#final");
   fin.hidden = false;
   fin.classList.add("en-vivo");
+  requestAnimationFrame(() => refreshGradients(fin)); // el título se troceó estando oculto
   fin.querySelectorAll(".pod").forEach((p) => p.classList.add("oculto"));
   $("#win-title").classList.add("oculto");
   fin.querySelectorAll("#end-buttons, .palmares, .board.compact").forEach((x) => x.classList.add("oculto"));
@@ -1034,6 +1035,7 @@ function showFinal({ still, keepVoice = false }) {
   if (!fin) return;
   gala.hidden = true;
   fin.hidden = false;
+  requestAnimationFrame(() => refreshGradients(fin));
   fin.querySelectorAll(".oculto").forEach((x) => x.classList.remove("oculto"));
   $("#skip").hidden = true;
   if (!still) {

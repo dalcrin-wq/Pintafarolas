@@ -77,6 +77,11 @@ function split(el) {
 }
 
 // Los títulos con degradado (logo, ganador): cada letra muestra su trozo del degradado de la palabra entera.
+/** Vuelve a pintar el degradado de las letras (p. ej. si el título estaba oculto al trocearlo). */
+export function refreshGradients(root = document) {
+  root.querySelectorAll(".dance-gradient").forEach(paintGradient);
+}
+
 function paintGradient(el) {
   const cs = getComputedStyle(el);
   if (!el.dataset.grad) {
