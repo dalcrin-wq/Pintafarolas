@@ -375,8 +375,9 @@ body.player { padding: .9rem; }
 .reveal-caption { font-size: 1.6rem; font-weight: 900; min-height: 2rem; text-shadow: var(--halo); margin: .4rem 0 0; }
 
 /* 4–5) Puntos del dibujo y clasificación */
-.marcador .board { max-width: 880px; }
-.marcador .brow { grid-template-columns: 2.6rem 40px 1fr 7rem 3.2rem 6rem; font-size: 1.25rem; }
+.marcador .board { max-width: min(1100px, 100%); margin-top: 2.2rem; }
+.marcador .brow { grid-template-columns: 3rem 48px 1fr 8rem 3.6rem 7rem; font-size: clamp(1.25rem, 2.2vw, 1.9rem); padding: .75rem 1.3rem; margin-bottom: 1rem; }
+.marcador .brow .avatar.tiny { width: 48px; height: 48px; }
 .brow .gain { font-family: var(--display); font-size: 1.5rem; color: var(--lima-oscura); text-align: right; transition: transform .6s, opacity .6s; }
 .brow .gain.cero { color: var(--niebla); opacity: .6; }
 .brow .gain.sumando { transform: translateX(150px) scale(.6); opacity: 0; }
