@@ -6,6 +6,7 @@ import { Music } from "./music.js";
 import { Sfx } from "./sfx.js";
 import { startPainter, setScene } from "./painter.js";
 import { startMotion } from "./motion.js";
+import { computeAwards } from "./awards.js";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -27,6 +28,7 @@ const RV = { intro: 2600, fuera: 4800, lie: 6200, truth: 6800, points: 4800, sum
 const app = $("#app");
 let settings = loadSettings();
 let me = null, code = null, roomRef = null, state = null, unsub = null;
+let endLive = false;
 let viewKey = "", timer = null, advancedFor = -1;
 let revealTimers = [], usedPrompts = new Set(), knownPlayers = new Map(), primed = false;
 let cues = { pid: -1, half: false, last10: false }, lobbyQuietSince = Date.now(), lobbyNags = 0, wasReady = false;
@@ -215,6 +217,8 @@ function onState() {
   announceJoins();
   const key = `${state.phase}|${state.phaseId}`;
   if (key !== viewKey) {
+    // ¿Veníamos de la partida (gala en directo) o es una recarga en mitad del final?
+    endLive = /^(drawing|lying|voting|reveal|scores)\|/.test(viewKey);
     viewKey = key;
     setScene(state.phase);
     renderPhase();
@@ -267,7 +271,7 @@ function onEnterPhase() {
     case "reveal": Music.play("intriga"); runReveal(); break;
     // Marcador y final: música de fiesta (la voz la baja mientras habla).
     case "scores": Music.play("fiesta"); Sfx.play("aplausos"); Voice.say("marcador", { interrupt: true }); break;
-    case "end": Music.play("fiesta"); Sfx.play("ovacion"); Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true }); break;
+    case "end": Music.play("fiesta"); break; // la gala (renderEnd) pone voz y efectos
   }
 }
 
@@ -323,6 +327,7 @@ function startGame() {
   for (const p of sortedPlayers(state)) upd[`players/${p.uid}/score`] = 0;
   usedPrompts = new Set();
   upd["settings/rounds"] = rondasPara(active().length);
+  Object.assign(upd, { gallery: null, likes: null, galaDone: null });
   return startRound(1, upd);
 }
 
@@ -337,7 +342,7 @@ function startRound(n, extra = {}) {
   });
   return setPhase("drawing", {
     ...extra, round: n, prompts,
-    drawings: null, lies: null, votes: null, options: null, results: null,
+    drawings: null, drawStats: null, lies: null, votes: null, options: null, results: null,
     current: null, queue: null, judgeTotal: null,
   }, state.settings.drawTime);
 }
@@ -411,6 +416,21 @@ function startReveal() {
   const results = { opts, gains, prev, last: !(s.queue || []).length, round: s.round, rounds: s.settings?.rounds || 1 };
   const upd = {};
   for (const [u, n] of Object.entries(gains)) upd[`players/${u}/score`] = (s.players?.[u]?.score || 0) + n;
+  // Para los premios del final: un registro por dibujo.
+  const st = s.drawStats?.[artist] || {};
+  const fooled = {}, gulped = {};
+  for (const o of opts) {
+    if (o.kind === "truth") continue;
+    for (const v of o.voters) gulped[v] = true;
+    if (o.kind === "lie" && o.voters.length) for (const a of o.authors || []) fooled[a] = (fooled[a] || 0) + o.voters.length;
+  }
+  upd[`gallery/${s.round}_${artist}`] = {
+    artist, round: s.round, img: s.drawings?.[artist] || "", prompt: s.prompts?.[artist] || "",
+    strokes: st.strokes ?? null, inks: st.inks ?? null,
+    truthVotes: opts.find((o) => o.kind === "truth")?.voters.length || 0,
+    voters: Object.keys(s.votes || {}).filter((u) => u !== artist).length,
+    fooled, gulped,
+  };
   return setPhase("reveal", { ...upd, results }, revealPlan(results).total / 1000 + 0.5);
 }
 
@@ -438,6 +458,7 @@ function playAgain() {
     phase: "lobby", phaseId: state.phaseId + 1, deadline: null, round: null, prompts: null,
     drawings: null, lies: null, votes: null, options: null, results: null,
     current: null, queue: null, judgeTotal: null, startRequested: null,
+    gallery: null, likes: null, galaDone: null, drawStats: null,
   };
   for (const p of sortedPlayers(state)) {
     upd[`players/${p.uid}/ready`] = false;
@@ -456,7 +477,7 @@ function renderPhase() {
     case "drawing": return renderDrawing();
     case "lying":
     case "voting": return renderJudge();
-    case "reveal": return renderReveal();
+    case "reveal": renderReveal(); return renderLikes();
     case "scores": return renderScores();
     case "end": return renderEnd();
   }
@@ -465,6 +486,19 @@ function renderPhase() {
 function updatePhase() {
   if (state.phase === "lobby") renderLobbyPlayers();
   else if (["drawing", "lying", "voting"].includes(state.phase)) renderProgress();
+  else if (state.phase === "reveal") renderLikes();
+}
+
+// ♥ que llegan desde los móviles durante el destape.
+function renderLikes() {
+  const el = $("#likes");
+  if (!el || !state.current) return;
+  const n = Object.keys(state.likes?.[`${state.round}_${state.current.artist}`] || {}).length;
+  if (String(n) === el.dataset.n) return;
+  el.dataset.n = n;
+  el.hidden = !n;
+  el.textContent = `♥ ${n}`;
+  el.animate([{ transform: "scale(1.6) rotate(-8deg)" }, { transform: "scale(1) rotate(4deg)" }], { duration: 450, easing: "cubic-bezier(.2,1.6,.5,1)" });
 }
 
 function joinURL() {
@@ -588,6 +622,7 @@ function artworkHTML() {
         <span class="c-autor">${avatarHTML(a, "tiny")} ${esc(a?.name || "Anónimo")}</span>
         <span class="c-tecnica">${technique(s.current.artist, s.round)}, ${new Date().getFullYear()}</span>
       </figcaption>
+      ${s.phase === "reveal" ? `<span class="likes" id="likes" hidden></span>` : ""}
     </figure>`;
 }
 
@@ -870,24 +905,135 @@ function winTitle() {
   return `¡Empate entre ${w.map((p) => esc(p.name)).join(" y ")}!`;
 }
 
+// ---------- Final: la gala de premios y el podio ----------
+// Orden de la gala: de lo más absurdo a lo más deseado.
+const GALA_ORDER = ["minimal", "serio", "color", "credulo", "nadie", "mentiroso", "favorito"];
+const GALA = { intro: 4200, drum: 600, open: 3300, award: 8600, pod: [1800, 3800, 7600], buttons: 9400 };
+
+function namesHTML(uids) {
+  const ps = uids.map((u) => state.players?.[u]).filter(Boolean);
+  return ps.map((p) => `<span class="aw-person">${avatarHTML(p)}<b>${esc(p.name)}</b></span>`).join("");
+}
+
 function renderEnd() {
   const r = ranking();
+  const awards = computeAwards(state).sort((a, b) => GALA_ORDER.indexOf(a.id) - GALA_ORDER.indexOf(b.id));
+  const live = endLive && !state.galaDone;
   app.innerHTML = `
     <section class="stage end">
-      <h2 class="winner-title">${winTitle()}</h2>
-      <div class="podium">${r.slice(0, 3).map((p, i) => `
-        <div class="pod p${i + 1}">${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
-          <span class="score">${p.score || 0}</span><div class="block">${i + 1}</div></div>`).join("")}
+      <div class="gala" id="gala"></div>
+      <div class="final" id="final" hidden>
+        <h2 class="winner-title" id="win-title">${winTitle()}</h2>
+        <div class="podium">${r.slice(0, 3).map((p, i) => `
+          <div class="pod p${i + 1}" data-pos="${i + 1}">${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
+            <span class="score">${p.score || 0}</span><div class="block">${i + 1}</div></div>`).join("")}
+        </div>
+        <div class="board compact">${boardHTML(r.slice(3), 3)}</div>
+        ${awards.length ? `<ul class="palmares">${awards.map((a) => `
+          <li><span class="pl-title">${esc(a.title)}</span> ${a.winners.map((u) => esc(state.players?.[u]?.name || "")).join(" y ")}</li>`).join("")}
+        </ul>` : ""}
+        <div class="row center" id="end-buttons">
+          <button class="btn big" id="again">Otra partida</button>
+          <button class="btn ghost" id="menu">Menú</button>
+        </div>
       </div>
-      <div class="board compact">${boardHTML(r.slice(3), 3)}</div>
-      <div class="row center">
-        <button class="btn big" id="again">Otra partida</button>
-        <button class="btn ghost" id="menu">Menú</button>
-      </div>
+      <button class="btn ghost small skip" id="skip" hidden>Saltar la gala</button>
     </section>`;
   $("#again").onclick = playAgain;
-  setTimeout(() => $("#again")?.focus(), 50);
   $("#menu").onclick = () => { Music.calmUntilVoiceEnds(); Voice.say("adios", { interrupt: true }); showMenu(); };
+  if (live) runGala(awards);
+  else showFinal({ still: true });
+}
+
+function later(ms, fn) {
+  const pid = state.phaseId;
+  revealTimers.push(setTimeout(() => { if (state?.phaseId === pid && state.phase === "end") fn(); }, ms));
+}
+
+function runGala(awards) {
+  const gala = $("#gala");
+  const skip = $("#skip");
+  skip.hidden = false;
+  skip.onclick = () => { clearReveal(); Voice.stop(); showFinal({ still: false }); };
+  gala.innerHTML = `
+    <div class="gala-intro">
+      <h2 class="gala-title">Los Garabatos de Oro</h2>
+      <p class="gala-sub">${awards.length ? `${awards.length} premios que nadie ha pedido` : "Este año no hay premios: el jurado está de huelga"}</p>
+    </div>`;
+  Voice.say("gala", { interrupt: true });
+  Sfx.play("aplausos");
+  let t = GALA.intro;
+  awards.forEach((a, i) => {
+    later(t, () => showAward(a, i, awards.length));
+    later(t + GALA.drum, () => Sfx.play("redoble"));
+    later(t + GALA.open, () => openAward(a));
+    t += GALA.award;
+  });
+  later(t, () => runPodium());
+}
+
+function showAward(a, i, n) {
+  $("#gala").innerHTML = `
+    <article class="award" data-award="${a.id}">
+      <p class="award-count">Premio ${i + 1} de ${n}</p>
+      <h2 class="award-title">${esc(a.title)}</h2>
+      <p class="award-desc">${esc(a.desc)}</p>
+      <div class="sobre" aria-hidden="true"><span class="sobre-solapa"></span><span class="sobre-sello">G</span></div>
+      <div class="award-winner">
+        ${a.img ? `<figure class="award-art"><img src="${safeImg(a.img)}" alt=""></figure>` : ""}
+        <div class="award-names">${namesHTML(a.winners)}</div>
+        <p class="award-stat">${esc(a.stat || "")}</p>
+      </div>
+    </article>`;
+}
+
+function openAward(a) {
+  const el = $(".award");
+  if (!el) return;
+  el.classList.add("abierto");
+  Sfx.play("aplausos");
+  Voice.say(a.voice, { interrupt: true });
+}
+
+function runPodium() {
+  $("#gala").hidden = true;
+  const fin = $("#final");
+  fin.hidden = false;
+  fin.classList.add("en-vivo");
+  fin.querySelectorAll(".pod").forEach((p) => p.classList.add("oculto"));
+  $("#win-title").classList.add("oculto");
+  fin.querySelectorAll("#end-buttons, .palmares, .board.compact").forEach((x) => x.classList.add("oculto"));
+  Voice.say("podio", { interrupt: true });
+  const pods = [...fin.querySelectorAll(".pod")].sort((a, b) => b.dataset.pos - a.dataset.pos); // 3.º, 2.º, 1.º
+  const times = GALA.pod.slice(3 - pods.length);
+  pods.forEach((pod, i) => {
+    const first = pod.dataset.pos === "1";
+    if (first) later(times[i] - 2700, () => Sfx.play("redoble"));
+    later(times[i], () => {
+      pod.classList.remove("oculto");
+      pod.classList.add("sube");
+      if (!first) return Sfx.play("aplausos");
+      Sfx.play("ovacion");
+      $("#win-title").classList.remove("oculto");
+      Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true });
+    });
+  });
+  later(GALA.buttons, () => showFinal({ still: true, keepVoice: true }));
+}
+
+function showFinal({ still, keepVoice = false }) {
+  const gala = $("#gala"), fin = $("#final");
+  if (!fin) return;
+  gala.hidden = true;
+  fin.hidden = false;
+  fin.querySelectorAll(".oculto").forEach((x) => x.classList.remove("oculto"));
+  $("#skip").hidden = true;
+  if (!still) {
+    Sfx.play("ovacion");
+    if (!keepVoice) Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true });
+  }
+  if (!state.galaDone) update(roomRef, { galaDone: true }).catch(() => {});
+  setTimeout(() => $("#again")?.focus(), 50);
 }
 
 // Cuenta atrás en pantalla.

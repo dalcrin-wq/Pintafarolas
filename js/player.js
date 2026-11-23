@@ -3,6 +3,7 @@ import { login, db, ref, set, update, onValue, serverTimestamp, onDisconnect, se
 import { DrawPad } from "./pad.js";
 import { startPainter, setScene } from "./painter.js";
 import { startMotion } from "./motion.js";
+import { computeAwards } from "./awards.js";
 import { $, $$, esc, normalize, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 const TITLE = "Garabatrola";
@@ -87,6 +88,8 @@ function render() {
     else if (s.phase === "drawing") key = `drawing|${s.phaseId}|${s.drawings?.[me.uid] ? 1 : 0}`;
     else if (s.phase === "lying") key = `lying|${s.phaseId}|${s.lies?.[me.uid] ? 1 : 0}`;
     else if (s.phase === "voting") key = `voting|${s.phaseId}|${s.votes?.[me.uid] ? 1 : 0}`;
+    else if (s.phase === "reveal") key = `reveal|${s.phaseId}|${liked() ? 1 : 0}`;
+    else if (s.phase === "end") key = `end|${s.phaseId}|${s.galaDone ? 1 : 0}`;
     else key = `${s.phase}|${s.phaseId}`;
   }
   if (key !== viewKey) {
@@ -98,6 +101,9 @@ function render() {
   }
   refresh();
 }
+
+const likeKey = () => `${state.round}_${state.current?.artist}`;
+const liked = () => !!state?.likes?.[likeKey()]?.[me.uid];
 
 function header() {
   const p = meP();
@@ -161,17 +167,29 @@ function build(kind) {
     case "voting": return buildVoting();
     case "reveal": {
       const g = s.results?.gains?.[me.uid] || 0;
-      return card(`<p class="big-emoji">👀</p><h2>Mira la pantalla</h2>
-        <p class="muted">${g ? `Con este dibujo te llevas <b>+${g}</b> puntos.` : "Vamos a ver quién ha mentido mejor."}</p>`);
+      const mine = s.current?.artist === me.uid;
+      card(`<p class="big-emoji">👀</p><h2>Mira la pantalla</h2>
+        <p class="muted">${g ? `Con este dibujo te llevas <b>+${g}</b> puntos.` : "Vamos a ver quién ha mentido mejor."}</p>
+        ${mine ? `<p class="muted">Es tu dibujo: los ♥ te los tienen que dar los demás.</p>`
+          : `<button class="btn big like ${liked() ? "on" : ""}" id="like">${liked() ? "♥ Te gusta este dibujo" : "♡ Me gusta este dibujo"}</button>`}`);
+      const b = $("#like");
+      if (b) b.onclick = () => set(roomPath(`likes/${likeKey()}/${me.uid}`), liked() ? null : true);
+      return;
     }
     case "scores": {
       const pos = myPosition();
       return card(`<p class="big-emoji">📊</p><h2>Vas ${pos}º</h2><p class="muted">Mira la clasificación en la pantalla.</p>`);
     }
     case "end": {
+      if (!s.galaDone) {
+        return card(`<p class="big-emoji">🏆</p><h2>¡Gala de premios!</h2>
+          <p class="muted">Mira la pantalla. Puede que te toque algo. Puede que no sea bueno.</p>`);
+      }
+      const mios = computeAwards(s).filter((a) => a.winners.includes(me.uid));
       const pos = myPosition();
       return card(`<p class="big-emoji">${pos === 1 ? "🏆" : "🎨"}</p><h2>${pos === 1 ? "¡Has ganado!" : `Has quedado ${pos}º`}</h2>
         <p class="muted">${pos === 1 ? "Eres oficialmente la persona menos fiable de la sala." : "Para la próxima, miente con más convicción."}</p>
+        ${mios.length ? `<p class="mis-premios">Tus premios: ${mios.map((a) => `<b>${esc(a.title)}</b>`).join(", ")}</p>` : ""}
         <p class="muted">Si el anfitrión pulsa «Otra partida», volverás a la sala.</p>`);
     }
   }
@@ -253,6 +271,9 @@ function sendDrawing(auto) {
     return;
   }
   sending = true;
+  // Para los premios: cuántos trazos y cuántas tintas (la goma no cuenta).
+  const tinta = pad.strokes.filter((st) => st.color !== "#ffffff");
+  set(roomPath(`drawStats/${me.uid}`), { strokes: tinta.length, inks: new Set(tinta.map((st) => st.color)).size }).catch(() => {});
   set(roomPath(`drawings/${me.uid}`), pad.toDataURL()).catch(() => { sending = false; });
 }
 

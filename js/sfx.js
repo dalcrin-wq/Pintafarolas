@@ -7,8 +7,9 @@ const BANK = {
   picado: ["picado-1", "picado-2", "picado-3", "picado-4", "picado-5", "picado-6"], // alguien se ha tragado una mentira
   aplausos: ["aplausos-1", "aplausos-2"],
   ovacion: ["ovacion"],
+  redoble: ["redoble"],
 };
-const VOL = { jugar: 0.85, click: 0.6, entra: 0.75, picado: 0.9, aplausos: 0.85, ovacion: 0.95 };
+const VOL = { jugar: 0.85, click: 0.6, entra: 0.75, picado: 0.9, aplausos: 0.85, ovacion: 0.95, redoble: 0.8 };
 
 let enabled = true;
 const last = {};

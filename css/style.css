@@ -63,12 +63,12 @@ b, strong { font-weight: 900; }
 
 /* ---------- Lienzos: tarjetas recortadas a mano ----------
    El papel va en ::before con el filtro de bordes rotos, para que el texto no se deforme. */
-.panel, .join-box, .pcard:not(.slot), .rc-inner, .brow, .card, .options li, .vote, .pod .block, .artwork {
+.panel, .join-box, .pcard:not(.slot), .rc-inner, .brow, .card, .options li, .vote, .pod .block, .artwork, .award {
   position: relative; isolation: isolate;
   background: none; border: 0; box-shadow: none;
 }
 .panel::before, .join-box::before, .pcard:not(.slot)::before, .rc-inner::before, .brow::before,
-.card::before, .options li::before, .vote::before, .pod .block::before {
+.card::before, .options li::before, .vote::before, .pod .block::before, .award::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
   background: var(--luz-cara), var(--paper-tex, none), var(--lienzo);
   filter: url(#rough) drop-shadow(7px 10px 0 rgba(34, 38, 72, .5));
@@ -388,3 +388,75 @@ body.player { padding: .9rem; }
 .brow.lider::before { background: var(--luz-cara), var(--paper-tex, none), linear-gradient(172deg, #f6e6a0, #ecc35c 70%, #de8f5f); }
 .brow.lider.nuevo { animation: nuevoLider 1.2s ease-out; }
 @keyframes nuevoLider { 0% { transform: scale(1); } 30% { transform: scale(1.08) rotate(-1deg); } 60% { transform: scale(.98) rotate(.5deg); } 100% { transform: none; } }
+
+/* ---------- ♥ del público en la obra (destape) ---------- */
+.artwork .likes {
+  position: absolute; left: -18px; top: -20px; transform: rotate(4deg);
+  font-family: var(--display); font-size: 1.7rem; color: var(--lienzo-claro);
+  background: radial-gradient(circle at 35% 30%, #ef9ab2, var(--rosa) 55%, #6a4a86); padding: .1rem .8rem .2rem; border-radius: 999px;
+  box-shadow: 3px 4px 0 -1px rgba(30, 34, 64, .55);
+}
+.btn.like { width: 100%; margin-top: 1rem; }
+.btn.like.on { background: var(--paper-tex, none), radial-gradient(circle at 35% 30%, #f3b0c2, var(--rosa) 60%, #7a4a86); color: var(--lienzo-claro); }
+.mis-premios { font-weight: 800; margin-top: .9rem; }
+
+/* ---------- La gala de premios ---------- */
+.gala { min-height: calc(100vh - 4rem); display: grid; place-items: center; }
+.gala-intro { animation: pop .6s cubic-bezier(.2, 1.5, .5, 1) both; }
+.gala-title {
+  font-size: clamp(3rem, 8vw, 6.4rem); line-height: 1;
+  background: linear-gradient(165deg, #f6e9b4 10%, #ecc35c 40%, #e0855f 62%, #d9577f 80%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(5px 7px 0 rgba(30, 34, 64, .75));
+}
+.gala-sub { font-size: clamp(1.3rem, 2.4vw, 2rem); font-weight: 900; color: var(--sobre-fondo); text-shadow: var(--halo); margin-top: 1rem; }
+
+.award {
+  width: min(880px, 92vw); border-radius: 18px; padding: 2rem 2.4rem 2.4rem; color: var(--tinta);
+  transform: rotate(-1.2deg); animation: entra-premio .7s cubic-bezier(.2, 1.4, .5, 1) both;
+}
+@keyframes entra-premio { from { transform: translateY(70px) rotate(6deg) scale(.85); opacity: 0; } }
+.award-count { margin: 0; font-weight: 800; color: var(--niebla); }
+.award-title { font-size: clamp(2.4rem, 5vw, 4rem); color: var(--indigo); margin: .2rem 0 0; line-height: 1.05; }
+.award-desc { font-size: clamp(1.1rem, 2vw, 1.6rem); font-weight: 700; margin: .4rem 0 1.4rem; }
+
+/* El sobre: tiembla con el redoble y sale volando al abrirse. */
+.sobre {
+  position: relative; width: 260px; height: 160px; margin: 1rem auto 0; border-radius: 8px;
+  background: var(--paper-tex, none), linear-gradient(170deg, #f4e7b8, #e4c98a 70%, #b98a6e);
+  box-shadow: 6px 9px 0 -1px rgba(30, 34, 64, .5); animation: tiembla-sobre .18s 1s infinite;
+}
+.sobre-solapa {
+  position: absolute; left: 0; right: 0; top: 0; height: 58%;
+  background: linear-gradient(175deg, #ead79c, #d7b878); clip-path: polygon(0 0, 100% 0, 50% 100%);
+  filter: drop-shadow(0 3px 0 rgba(90, 60, 50, .25)); transform-origin: top;
+}
+.sobre-sello {
+  position: absolute; left: 50%; top: 48%; transform: translate(-50%, -50%) rotate(-8deg);
+  width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--display); font-size: 1.8rem; color: var(--lienzo-claro);
+  background: radial-gradient(circle at 35% 30%, #e98aa5, #b23a63 60%, #5a3a76);
+}
+@keyframes tiembla-sobre { 50% { transform: rotate(1.6deg) translateY(-2px); } }
+.award.abierto .sobre { animation: vuela-sobre .7s ease-in forwards; }
+.award.abierto .sobre-solapa { transform: rotateX(180deg); transition: transform .25s; }
+@keyframes vuela-sobre { 30% { transform: translateY(-20px) rotate(-6deg); } to { transform: translate(140%, -60px) rotate(28deg); opacity: 0; } }
+.award-winner { display: none; }
+.award.abierto .award-winner { display: flex; flex-direction: column; align-items: center; gap: .9rem; animation: pop .55s .35s cubic-bezier(.2, 1.7, .5, 1) both; }
+.award.abierto .sobre { position: absolute; left: calc(50% - 130px); bottom: 2rem; margin: 0; }
+.award-art { margin: 0; padding: 10px; transform: rotate(2deg); background: linear-gradient(150deg, #e9c67a, #b98a4e 45%, #7a5a48 80%, #4a3f5e); box-shadow: 8px 10px 0 -2px rgba(30, 34, 64, .5); }
+.award-art img { display: block; width: min(34vh, 300px); aspect-ratio: 1; background: #fbf8ec; }
+.award-names { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem 1.8rem; }
+.aw-person { display: flex; align-items: center; gap: .6rem; font-size: clamp(1.6rem, 3.4vw, 2.6rem); }
+.aw-person .avatar { width: 76px; height: 76px; }
+.award-stat { margin: 0; font-size: clamp(1.2rem, 2.2vw, 1.8rem); font-weight: 900; color: var(--rosa); }
+
+/* El podio, de uno en uno */
+.final .oculto { visibility: hidden; }
+.pod.sube { animation: sube-podio .7s cubic-bezier(.2, 1.5, .5, 1) both; }
+@keyframes sube-podio { from { transform: translateY(120px); opacity: 0; } }
+.palmares { list-style: none; padding: 0; margin: 1rem auto 0; display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem .8rem; max-width: 1100px; }
+.palmares li { background: rgba(255, 250, 230, .82); color: var(--tinta); border-radius: 999px; padding: .2rem .9rem; font-weight: 700; box-shadow: 2px 3px 0 -1px rgba(30, 34, 64, .35); }
+.palmares .pl-title { font-weight: 900; color: var(--indigo); }
+.skip { position: fixed; right: 1.4rem; bottom: 1.2rem; z-index: 5; }
+@media (prefers-reduced-motion: reduce) { .sobre, .award, .pod.sube { animation: none !important; } }
