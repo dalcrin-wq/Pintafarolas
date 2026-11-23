@@ -96,4 +96,19 @@ export class DrawPad {
     img.src = src;
   }
   toDataURL() { return this.c.toDataURL("image/png"); }
+  /** Los trazos en texto compacto, para que la tele los repinte uno a uno. Null si hay imagen de fondo. */
+  toStrokes() {
+    if (this.base) return null;
+    const l = this.strokes.map((s) => {
+      const out = [];
+      let lx = -99, ly = -99;
+      s.pts.forEach(([x, y], i) => {
+        if (i && i < s.pts.length - 1 && Math.hypot(x - lx, y - ly) < 3) return; // aligera sin cambiar la forma
+        out.push(Math.round(x), Math.round(y));
+        lx = x; ly = y;
+      });
+      return [s.color, s.width, out];
+    });
+    return JSON.stringify({ s: this.c.width, l });
+  }
 }

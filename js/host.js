@@ -291,8 +291,13 @@ function onEnterPhase() {
       if (!$("#reparto") || $("#reparto").hidden) Music.play("dibujo");
       break;
     }
-    case "lying": Music.play("dibujo"); Voice.say("mentir", { interrupt: true }); break;
-    case "voting": Music.play("intriga"); Voice.say("votar", { interrupt: true }); break;
+    case "lying": {
+      Music.play("intriga");
+      // La voz entra cuando acaba de repintarse el dibujo (renderJudge); si es una recarga, ya.
+      if (state.deadline - serverNow() <= (state.settings.lieTime - 3) * 1000) Voice.say("mentir", { interrupt: true });
+      break;
+    }
+    case "voting": Voice.say("votar", { interrupt: true }); break;
     case "reveal": Music.play("intriga"); runReveal(); break;
     // Marcador y final: música de fiesta (la voz la baja mientras habla).
     case "scores": Music.play("fiesta"); Sfx.play("aplausos"); Voice.say("marcador", { interrupt: true }); break;
@@ -367,7 +372,7 @@ function startRound(n, extra = {}) {
   });
   return setPhase("drawing", {
     ...extra, round: n, prompts,
-    drawings: null, drawStats: null, lies: null, votes: null, options: null, results: null,
+    drawings: null, drawStats: null, trazos: null, lies: null, votes: null, options: null, results: null,
     current: null, queue: null, judgeTotal: null,
   }, state.settings.drawTime);
 }
@@ -481,7 +486,7 @@ function playAgain() {
   Voice.say("otra", { interrupt: true });
   const upd = {
     phase: "lobby", phaseId: state.phaseId + 1, deadline: null, round: null, prompts: null,
-    drawings: null, lies: null, votes: null, options: null, results: null,
+    drawings: null, trazos: null, lies: null, votes: null, options: null, results: null,
     current: null, queue: null, judgeTotal: null, startRequested: null,
     gallery: null, likes: null, galaDone: null, drawStats: null,
   };
@@ -689,11 +694,14 @@ function renderProgress(first = false) {
     list = list.filter((p) => p.uid !== s.current?.artist);
     done = s.phase === "lying" ? (u) => !!s.lies?.[u] : (u) => !!s.votes?.[u];
   }
+  const n = list.filter((p) => done(p.uid)).length;
+  const prev = +(el.dataset.n || 0);
+  if (!first && n > prev) Sfx.play("entrega");
+  el.dataset.n = n;
   el.innerHTML = list.map((p) => `
-    <div class="pcard small ${done(p.uid) ? "done" : ""}">
-      ${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
-      <span class="badge">${done(p.uid) ? "✓" : "…"}</span>
-    </div>`).join("");
+    <span class="chip ${done(p.uid) ? "hecho" : ""}" style="--h:${hue(p.uid)}">${avatarHTML(p, "tiny")}${esc(p.name)}${done(p.uid) ? " ✓" : ""}</span>`).join("");
+  const c = $("#cuenta");
+  if (c) c.innerHTML = `<b>${n} de ${list.length}</b> ${s.phase === "lying" ? "han escrito su mentira" : "ya han votado"}`;
 }
 
 function renderHojas(first) {
@@ -736,41 +744,138 @@ function technique(uid = "", round = 1) {
   return TECHNIQUES[h % TECHNIQUES.length];
 }
 
-function artworkHTML() {
+function artworkHTML({ canvas = false, secreto = false } = {}) {
   const s = state;
   const a = s.players?.[s.current.artist];
   return `
     <figure class="artwork">
-      <img src="${safeImg(s.drawings?.[s.current.artist])}" alt="">
+      ${canvas ? `<canvas class="obra" width="360" height="360"></canvas>` : `<img src="${safeImg(s.drawings?.[s.current.artist])}" alt="">`}
       <figcaption class="cartela">
-        <span class="c-autor">${avatarHTML(a, "tiny")} ${esc(a?.name || "Anónimo")}</span>
+        <span class="c-autor">${secreto ? `<span class="avatar tiny incognito">?</span> Autor desconocido` : `${avatarHTML(a, "tiny")} ${esc(a?.name || "Anónimo")}`}</span>
         <span class="c-tecnica">${technique(s.current.artist, s.round)}, ${new Date().getFullYear()}</span>
       </figcaption>
       ${s.phase === "reveal" ? `<span class="likes" id="likes" hidden></span>` : ""}
     </figure>`;
 }
 
-function renderJudge() {
+// ---------- Mentir y votar: el dibujo en el centro de la mesa ----------
+const SE_DESCUBRE = ["Agarraos a la silla", "Que nadie se ría todavía", "Atención: arte", "Respirad hondo", "Sin juzgar. Bueno, un poco"];
+
+function opcionHTML(o, n) {
+  return `<li class="opcion" data-id="${o.id}" style="--i:${n}"><span class="num">${n + 1}</span><span class="txt">${esc(o.text)}</span>
+    <span class="opt-voters"></span><span class="stamp"></span><span class="gain-badge"></span></li>`;
+}
+
+function mesaHTML({ voting, reveal = false }) {
   const s = state;
-  const voting = s.phase === "voting";
-  app.innerHTML = `
-    <section class="stage judge">
-      <header class="stage-head">
-        <h2>${voting ? "¿Cuál es la verdad?" : "¿Qué demonios es esto?"}
-          <small>Dibujo ${s.current.index} de ${s.current.total}</small></h2>
-        <div class="timer" data-timer></div>
+  const opts = voting ? (reveal ? Object.values(s.results?.opts || {}) : s.options || []) : [];
+  const orden = (s.options || []).map((o) => o.id);
+  const num = (o) => Math.max(0, orden.indexOf(o.id));
+  const izq = opts.filter((_, i) => i % 2 === 0), der = opts.filter((_, i) => i % 2 === 1);
+  return `
+    <section class="stage mesa ${reveal ? "destapando" : voting ? "votando" : "mintiendo"}">
+      <header class="mesa-head">
+        <h2>¿Qué es esto?</h2>
+        <p class="mesa-sub" id="mesa-sub">${reveal ? "Se acabó: a ver quién ha picado" : voting ? "Uno es verdad · votad en el móvil" : `Dibujo ${s.current.index} de ${s.current.total}`}</p>
+        ${reveal ? "" : `<div class="timer" data-timer></div>`}
       </header>
-      <div class="judge-body">
-        ${artworkHTML()}
-        <div class="judge-side">
-          ${voting
-            ? `<ol class="options">${(s.options || []).map((o) => `<li>${esc(o.text)}</li>`).join("")}</ol>`
-            : `<p class="stage-sub">Escribid en el móvil un título falso que engañe a los demás.</p>`}
-          <div class="players progress" id="progress"></div>
-        </div>
+      <div class="mesa-cuerpo">
+        <ol class="col izq">${izq.map((o) => opcionHTML(o, num(o))).join("")}</ol>
+        <div class="centro">${artworkHTML({ canvas: !voting && !reveal, secreto: true })}<p class="pintando" id="pintando"></p></div>
+        <ol class="col der">${der.map((o) => opcionHTML(o, num(o))).join("")}</ol>
       </div>
+      ${reveal ? `<p class="reveal-caption" id="reveal-caption"></p>` : `
+      <div class="mesa-pie"><p class="cuenta" id="cuenta"></p><div class="chips" id="progress"></div></div>
+      <div class="lapiz" aria-hidden="true"><div class="lapiz-cuerpo" id="lapiz"><span class="lapiz-goma"></span></div><span class="lapiz-punta"></span></div>`}
+      <div class="descubre" id="descubre" hidden></div>
     </section>`;
-  renderProgress();
+}
+
+function renderJudge() {
+  const voting = state.phase === "voting";
+  app.innerHTML = mesaHTML({ voting });
+  renderProgress(true);
+  const fresh = state.deadline - serverNow() > ((voting ? state.settings.voteTime : state.settings.lieTime) - 3) * 1000;
+  if (voting) {
+    if (fresh) {
+      app.querySelectorAll(".opcion").forEach((li, i) => {
+        li.classList.add("espera");
+        later2(900 + i * 110, () => { li.classList.remove("espera"); li.classList.add("aparece"); Sfx.play("pop"); });
+      });
+    }
+    return;
+  }
+  const cv = app.querySelector("canvas.obra");
+  const trazos = state.trazos?.[state.current.artist];
+  if (!fresh) return pintarFinal(cv);
+  // Intro: «Se descubre el dibujo» · tic-tic-tic · se repinta trazo a trazo.
+  const mesa = app.querySelector(".mesa");
+  mesa.classList.add("en-intro");
+  const box = $("#descubre");
+  box.hidden = false;
+  box.innerHTML = `<div class="reparto-carta"><p class="reparto-k">Se descubre el dibujo</p>
+    <p class="reparto-t">${SE_DESCUBRE[Math.floor(Math.random() * SE_DESCUBRE.length)]}</p><p class="reparto-dots"><i></i><i></i><i></i></p></div>`;
+  const dots = box.querySelectorAll(".reparto-dots i");
+  [0, 1, 2].forEach((i) => later2(700 + i * 260, () => { dots[i]?.classList.add("on"); Sfx.play("tic"); }));
+  later2(1500, () => {
+    box.classList.add("fuera");
+    Sfx.play("revelar");
+    const p = $("#pintando");
+    if (p) p.textContent = "— se está pintando";
+    const ms = trazos ? repintar(cv, trazos) : (pintarFinal(cv), 400);
+    later2(ms + 250, () => {
+      box.hidden = true;
+      if (p) p.textContent = "";
+      mesa.classList.remove("en-intro");
+      Sfx.play("pop");
+      Voice.say("mentir", { interrupt: true });
+    });
+  });
+}
+
+function pintarFinal(cv) {
+  if (!cv) return;
+  const img = new Image();
+  img.onload = () => cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+  img.src = safeImg(state.drawings?.[state.current.artist]);
+}
+
+/** Repinta el dibujo trazo a trazo con sonido de lápiz. Devuelve cuánto tarda (ms). */
+function repintar(cv, json) {
+  let data;
+  try { data = JSON.parse(json); } catch { pintarFinal(cv); return 400; }
+  const x = cv.getContext("2d");
+  const k = cv.width / (data.s || 360);
+  x.fillStyle = "#ffffff";
+  x.fillRect(0, 0, cv.width, cv.height);
+  // Cada trazo = un punto inicial y luego sus segmentos.
+  const ev = [];
+  for (const [color, width, pts] of data.l || []) {
+    if (!pts || pts.length < 2) continue;
+    ev.push({ color, w: width * k, x: pts[0] * k, y: pts[1] * k, start: true });
+    for (let j = 2; j < pts.length; j += 2) ev.push({ color, w: width * k, x0: pts[j - 2] * k, y0: pts[j - 1] * k, x: pts[j] * k, y: pts[j + 1] * k });
+  }
+  if (!ev.length) { pintarFinal(cv); return 400; }
+  const dur = Math.min(2400, Math.max(700, ev.length * 8));
+  const t0 = performance.now(), pid = state.phaseId;
+  let done = 0, lastSfx = -1e9;
+  const step = (now) => {
+    if (state?.phaseId !== pid || !cv.isConnected) return;
+    const target = Math.min(ev.length, Math.ceil(((now - t0) / dur) * ev.length));
+    for (; done < target; done++) {
+      const e = ev[done];
+      x.strokeStyle = x.fillStyle = e.color;
+      x.lineWidth = e.w; x.lineCap = "round"; x.lineJoin = "round";
+      x.beginPath();
+      if (e.start) {
+        x.arc(e.x, e.y, e.w / 2, 0, Math.PI * 2); x.fill();
+        if (now - lastSfx > 110) { Sfx.play("trazo", { rate: 0.9 + Math.random() * 0.25 }); lastSfx = now; }
+      } else { x.moveTo(e.x0, e.y0); x.lineTo(e.x, e.y); x.stroke(); }
+    }
+    if (done < ev.length) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  return dur;
 }
 
 function renderReveal() {

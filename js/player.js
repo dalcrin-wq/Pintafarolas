@@ -274,6 +274,8 @@ function sendDrawing(auto) {
   // Para los premios: cuántos trazos y cuántas tintas (la goma no cuenta).
   const tinta = pad.strokes.filter((st) => st.color !== "#ffffff");
   set(roomPath(`drawStats/${me.uid}`), { strokes: tinta.length, inks: new Set(tinta.map((st) => st.color)).size }).catch(() => {});
+  const trazos = pad.toStrokes();
+  if (trazos && trazos.length < 60000) set(roomPath(`trazos/${me.uid}`), trazos).catch(() => {});
   set(roomPath(`drawings/${me.uid}`), pad.toDataURL()).catch(() => { sending = false; });
 }
 

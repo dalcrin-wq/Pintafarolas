@@ -518,3 +518,45 @@ body.player { padding: .9rem; }
 .reparto.fuera { animation: sale-reparto .55s ease-in forwards; }
 @keyframes sale-reparto { to { opacity: 0; transform: scale(1.1); } }
 @media (prefers-reduced-motion: reduce) { .hoja.cuelga { animation: none; } .cara svg path { animation: none; } }
+
+/* ---------- Mentir y votar: la mesa ---------- */
+.mesa { display: flex; flex-direction: column; align-items: center; position: relative; overflow: hidden; }
+.mesa-head { position: relative; width: 100%; text-align: center; transition: opacity .4s; }
+.mesa-head h2 { font-size: clamp(2.6rem, 5.6vw, 4.8rem); color: var(--indigo); text-shadow: var(--halo), 4px 5px 0 rgba(59, 63, 102, .25); margin: 0; }
+.mesa-sub { margin: .1rem 0 0; font-weight: 900; color: var(--sobre-fondo); text-shadow: var(--halo); }
+.mesa-head .timer { position: absolute; right: 0; top: 0; }
+.mesa-cuerpo { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: clamp(1rem, 2.5vw, 2.6rem); width: 100%; margin-top: 1rem; }
+.centro { position: relative; }
+.mesa .artwork { width: min(50vh, 440px); max-width: none; }
+.mesa.votando .artwork { width: min(42vh, 360px); }
+.artwork canvas.obra { width: 100%; aspect-ratio: 1; display: block; background: #fff; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08), 0 0 0 4px #3a3150; }
+.avatar.incognito { display: inline-grid; place-items: center; font-family: var(--display); background: var(--niebla); color: var(--lienzo-claro); }
+.pintando { position: absolute; left: 0; right: 0; top: -2.4rem; text-align: center; margin: 0; font-weight: 900; color: var(--rosa); text-shadow: var(--halo); font-size: 1.3rem; }
+.col { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1.1rem; }
+.col.izq { align-items: flex-end; }
+.col.der { align-items: flex-start; }
+.opcion { position: relative; isolation: isolate; color: var(--tinta); max-width: 100%; padding: .8rem 1.2rem .9rem 1.2rem; border-radius: 14px;
+  font-size: clamp(1.4rem, 2.6vw, 2.5rem); font-weight: 900; line-height: 1.08; transform: rotate(calc((var(--i) - 1.5) * .8deg)); transition: transform .5s cubic-bezier(.3, 1.4, .5, 1), opacity .4s, filter .4s; }
+.col.izq .opcion { text-align: right; }
+.opcion::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  background: var(--luz-cara), var(--paper-tex, none), var(--lienzo); filter: url(#rough-small) drop-shadow(6px 8px 0 rgba(34, 38, 72, .45)); }
+.opcion .num { display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: 50%; font-size: .6em; vertical-align: .25em; margin: 0 .5em;
+  font-family: var(--display); color: var(--lienzo-claro); background: radial-gradient(circle at 35% 30%, #6b6f9a, var(--indigo) 60%, #262a40); }
+.col.izq .opcion .num { float: right; margin-right: 0; }
+.col.der .opcion .num { float: left; margin-left: 0; }
+.opcion.espera { opacity: 0; transform: scale(.5) rotate(-8deg); }
+.opcion.aparece { animation: aparece .45s cubic-bezier(.2, 1.7, .5, 1) both; }
+@keyframes aparece { from { opacity: 0; transform: scale(.5) rotate(-8deg); } }
+.opcion .opt-voters:empty, .opcion .stamp:empty, .opcion .gain-badge:empty { display: none; }
+.mesa-pie { display: flex; flex-direction: column; align-items: center; gap: .5rem; margin-top: 1.4rem; transition: opacity .4s; }
+.cuenta { margin: 0; font-weight: 800; text-shadow: var(--halo); }
+.cuenta b { color: var(--rosa); }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; }
+.chip { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .8rem .15rem .2rem; border-radius: 99px; font-weight: 800;
+  background: rgba(255, 252, 235, .55); color: rgba(38, 42, 64, .6); box-shadow: inset 0 0 0 2px rgba(59, 63, 102, .25); transition: background .3s, color .3s; }
+.chip.hecho { background: hsl(var(--h) 70% 82%); color: var(--tinta); box-shadow: inset 0 0 0 2px hsl(var(--h) 55% 45%), 2px 3px 0 rgba(30, 34, 64, .3); animation: pop .35s cubic-bezier(.2, 1.7, .5, 1); }
+.mesa .lapiz { margin-top: 1.2rem; }
+.mesa.en-intro .mesa-head h2, .mesa.en-intro .mesa-sub, .mesa.en-intro .mesa-pie, .mesa.en-intro .lapiz, .mesa.en-intro .timer { opacity: 0; }
+.descubre { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; backdrop-filter: blur(4px); background: rgba(236, 226, 182, .3); }
+.descubre[hidden] { display: none; }
+.descubre.fuera { animation: sale-reparto .45s ease-in forwards; }
