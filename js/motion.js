@@ -2,7 +2,7 @@
 // desperezan de vez en cuando. Si hay música (la tele), se sincroniza con ella;
 // si no (el móvil), sigue un pulso suave al mismo tempo.
 const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const DANCERS = ".logo, .tagline, .stage-head h2, .winner-title, .lobby-side h2, .panel h2, .card h2";
+const DANCERS = ".logo, .stage-head h2, .winner-title, .lobby-side h2, .panel h2, .card h2";
 const MENU_BTNS = ".menu .btn"; // en el menú, los botones también bailan, todo el rato
 const BPM = 115.04;
 const WAVE = 0.07; // desfase entre letras, en fracción del ciclo: hace la ola

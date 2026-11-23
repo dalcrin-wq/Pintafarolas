@@ -3,12 +3,13 @@ import { login, db, ref, set, update, get, onValue, remove, serverTimestamp, ser
 import { PROMPTS, SPICY_PROMPTS, HOUSE_LIES } from "./prompts.js";
 import { Voice } from "./voice.js";
 import { Music } from "./music.js";
+import { Sfx } from "./sfx.js";
 import { startPainter, setScene } from "./painter.js";
 import { startMotion } from "./motion.js";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
-const DEFAULTS = { pace: "normal", rounds: 2, spicy: false, canvas: "comodo", hideCode: false, music: true, voice: true };
+const DEFAULTS = { pace: "normal", rounds: 2, spicy: false, canvas: "comodo", hideCode: false, music: true, voice: true, sfx: true };
 // Ritmo: segundos para dibujar, mentir y votar.
 const PACES = {
   normal: { draw: 75, lie: 40, vote: 25 },
@@ -47,11 +48,19 @@ let audioUnlocked = false;
 function unlockAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;
+  Sfx.preload();
   if (settings.music) Music.start();
   // Como en la tele: base suave mientras saluda, y al callarse entra el bombo.
   if (viewKey === "menu") { Music.calmUntilVoiceEnds(); Voice.say("menu"); }
 }
 document.addEventListener("pointerdown", unlockAudio);
+
+// Cada botón de la tele hace «pop» (y Jugar, su «ta-da»: lo pone su propio manejador).
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.disabled || b.id === "play") return;
+  Sfx.play("click");
+}, true);
 
 // Mando de la tele / teclado: flechas para moverse entre botones, Enter para elegir.
 document.addEventListener("keydown", (e) => {
@@ -78,6 +87,7 @@ if (soundBtn) {
   setInterval(() => { soundBtn.hidden = audioUnlocked; }, 500);
 }
 Voice.setEnabled(settings.voice);
+Sfx.setEnabled(settings.sfx !== false);
 
 const nameOf = (uid) => state?.players?.[uid]?.name || "alguien";
 const active = () => sortedPlayers(state).filter((p) => p.connected !== false);
@@ -102,7 +112,7 @@ function showMenu() {
       <p class="hint">Pon esta pantalla en la tele. Los demás juegan con el móvil.</p>
       <p class="hint small">flechas para moverte · Enter para elegir</p>
     </section>`;
-  $("#play").onclick = () => { unlockAudio(); createRoom(); };
+  $("#play").onclick = () => { unlockAudio(); Sfx.play("jugar"); createRoom(); };
   $("#cfg").onclick = () => { unlockAudio(); Voice.say("ajustes"); showSettings(); };
   $("#play").focus();
 }
@@ -120,6 +130,7 @@ const SETTING_ROWS = [
     options: [[false, "No"], [true, "Sí"]] },
   { key: "music", label: "Música", help: "", options: [[true, "Sí"], [false, "No"]] },
   { key: "voice", label: "Voz de Lola", help: "", options: [[true, "Sí"], [false, "No"]] },
+  { key: "sfx", label: "Efectos de sonido", help: "Botones, entradas, batacazos y aplausos.", options: [[true, "Sí"], [false, "No"]] },
 ];
 
 function showSettings() {
@@ -145,6 +156,7 @@ function showSettings() {
     app.querySelectorAll(`.seg-btn[data-key="${b.dataset.key}"]`).forEach((x) => x.classList.toggle("on", x === b));
     if (b.dataset.key === "voice") Voice.setEnabled(settings.voice);
     if (b.dataset.key === "music") settings.music ? Music.start() : Music.stop();
+    if (b.dataset.key === "sfx") Sfx.setEnabled(settings.sfx);
   });
   $("#back").onclick = showMenu;
   app.querySelector(".seg-btn.on")?.focus();
@@ -217,7 +229,7 @@ function announceJoins() {
     const online = p.connected !== false;
     if (!knownPlayers.has(p.uid)) {
       knownPlayers.set(p.uid, online);
-      if (primed && state.phase === "lobby") Voice.say("entra", { ifIdle: true });
+      if (primed && state.phase === "lobby") { Sfx.play("entra"); Voice.say("entra", { ifIdle: true }); }
       continue;
     }
     const was = knownPlayers.get(p.uid);
@@ -245,6 +257,7 @@ function onEnterPhase() {
     case "drawing": {
       Music.play("dibujo");
       const r = state.round, total = state.settings?.rounds || 1;
+      if (r === 1) Sfx.play("jugar"); // ¡empieza la partida!
       Voice.say(r === 1 ? "empieza" : r === total ? "ultima" : "dibujo", { interrupt: true });
       break;
     }
@@ -252,8 +265,8 @@ function onEnterPhase() {
     case "voting": Music.play("intriga"); Voice.say("votar", { interrupt: true }); break;
     case "reveal": Music.play("intriga"); runReveal(); break;
     // Marcador y final: música de fiesta (la voz la baja mientras habla).
-    case "scores": Music.play("fiesta"); Voice.say("marcador", { interrupt: true }); break;
-    case "end": Music.play("fiesta"); Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true }); break;
+    case "scores": Music.play("fiesta"); Sfx.play("aplausos"); Voice.say("marcador", { interrupt: true }); break;
+    case "end": Music.play("fiesta"); Sfx.play("ovacion"); Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true }); break;
   }
 }
 
@@ -636,7 +649,13 @@ function renderRevealCard(o) {
 
 function speakReveal(o) {
   const n = (o.voters || []).length;
-  if (o.kind === "lie") return Voice.say(n >= 2 ? "coloMuchos" : "colo");
+  if (o.kind === "lie") {
+    // Alguien se la ha tragado: batacazo de dibujos animados y, después, la presentadora.
+    const ms = n > 0 ? Sfx.play("picado") : 0;
+    const pid = state.phaseId;
+    const say = () => { if (state?.phaseId === pid) Voice.say(n >= 2 ? "coloMuchos" : "colo"); };
+    return ms ? setTimeout(say, Math.min(ms, 2200)) : say();
+  }
   if (o.kind === "house") return Voice.say("casa");
   const judges = active().filter((p) => p.uid !== state.current?.artist).length;
   Voice.say(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad");
