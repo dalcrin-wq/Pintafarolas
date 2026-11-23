@@ -28,6 +28,8 @@
   --sombra: 7px 10px 0 -2px rgba(34, 38, 72, .55);
   --sombra-suave: 4px 6px 0 -1px rgba(34, 38, 72, .45);
   --luz-cara: linear-gradient(150deg, rgba(255, 244, 205, .55) 0%, rgba(255, 244, 205, 0) 38%, rgba(84, 96, 150, 0) 62%, rgba(84, 96, 150, .2) 100%);
+  --sobre-fondo: #24304a;   /* texto directo sobre el cuadro */
+  --halo: 0 0 2px rgba(250, 244, 222, .9), 0 0 14px rgba(250, 244, 222, .85);
   --display: "Knewave", "Baloo 2", system-ui, sans-serif;
   --texto: "Nunito", system-ui, sans-serif;
 }
@@ -38,7 +40,7 @@ body {
   font-family: var(--texto);
   font-weight: 600;
   color: var(--tinta);
-  background: var(--pizarra);
+  background: #6f8a8a;
   min-height: 100vh;
 }
 #app { min-height: 100vh; position: relative; z-index: 1; }
@@ -48,7 +50,7 @@ small { font-size: .5em; opacity: .8; font-family: var(--texto); font-weight: 70
 b, strong { font-weight: 900; }
 .muted { color: var(--niebla); }
 .error { color: #b23a5e; font-weight: 800; min-height: 1.2em; }
-.loading { color: var(--lienzo); font-size: 1.6rem; text-align: center; padding-top: 30vh; text-shadow: 0 2px 0 rgba(30, 34, 60, .6); }
+.loading { color: var(--sobre-fondo); font-size: 1.6rem; text-align: center; padding-top: 30vh; text-shadow: var(--halo); }
 
 /* ---------- El cuadro de fondo ---------- */
 .painting { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
@@ -104,12 +106,12 @@ b, strong { font-weight: 900; }
 .logo.small { font-size: 2.7rem; text-align: center; }
 @keyframes wobble { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(-1deg) scale(1.02); } }
 @media (prefers-reduced-motion: reduce) { .logo, .winner-title { animation: none; } }
-.tagline { color: var(--lienzo); font-size: 1.6rem; font-weight: 800; margin: .2rem 0 2.2rem; text-shadow: 0 2px 0 rgba(30, 34, 60, .7); }
+.tagline { color: var(--sobre-fondo); font-size: 1.6rem; font-weight: 800; margin: .2rem 0 2.2rem; text-shadow: var(--halo); }
 
 /* ---------- Pantalla grande ---------- */
 .menu { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2rem; }
 .menu-buttons { display: flex; flex-direction: column; gap: 1.1rem; min-width: 280px; }
-.hint { color: var(--lienzo); margin-top: 2rem; font-size: 1.1rem; text-shadow: 0 2px 0 rgba(30, 34, 60, .7); }
+.hint { color: var(--sobre-fondo); margin-top: 2rem; font-size: 1.1rem; text-shadow: var(--halo); }
 .hint.small { font-size: .95rem; margin-top: .4rem; opacity: .8; }
 
 .panel { max-width: 560px; margin: 8vh auto; border-radius: 18px; padding: 2rem 2.2rem; }
@@ -135,13 +137,13 @@ b, strong { font-weight: 900; }
 .room-code { font-size: 1.05rem; margin: 0; color: var(--niebla); }
 .room-code span { display: block; font-family: var(--display); font-weight: 400; font-size: 3.6rem; letter-spacing: .18em; line-height: 1.1; color: var(--indigo); }
 .join-box.hidden-code .qr, .join-box.hidden-code .room-code span, .join-box.hidden-code .join-text b { filter: blur(14px); }
-.lobby-side h2 { color: var(--lienzo); font-size: 3rem; text-shadow: 4px 5px 0 rgba(30, 34, 64, .7); }
-.lobby-side h2 small { color: var(--lienzo); }
-.lobby-status { color: var(--lienzo); font-size: 1.3rem; font-weight: 800; text-shadow: 0 2px 0 rgba(30, 34, 60, .7); }
-.empty-msg { color: var(--lienzo); font-size: 1.3rem; }
+.lobby-side h2 { color: var(--indigo); font-size: 3rem; text-shadow: var(--halo), 4px 5px 0 rgba(59, 63, 102, .25); }
+.lobby-side h2 small { color: var(--sobre-fondo); }
+.lobby-status { color: var(--sobre-fondo); font-size: 1.3rem; font-weight: 800; text-shadow: var(--halo); }
+.empty-msg { color: var(--sobre-fondo); font-size: 1.3rem; }
 
 .howto { list-style: none; padding: 0; margin: .8rem 0 1.2rem; display: grid; grid-template-columns: repeat(4, 1fr); gap: .8rem; }
-.howto li { background: rgba(32, 37, 58, .62); color: var(--lienzo); border-radius: 14px 18px 12px 16px; padding: .7rem .8rem; font-size: 1rem; line-height: 1.3; }
+.howto li { background: rgba(46, 58, 84, .7); color: var(--lienzo); border-radius: 14px 18px 12px 16px; padding: .7rem .8rem; font-size: 1rem; line-height: 1.3; }
 .howto b { display: inline-flex; width: 1.7rem; height: 1.7rem; align-items: center; justify-content: center; border-radius: 50%; background: var(--oro); color: var(--tinta); margin-right: .3rem; font-family: var(--display); font-weight: 400; }
 
 /* Jugadores */
@@ -158,8 +160,8 @@ b, strong { font-weight: 900; }
 .pname { font-weight: 900; font-size: 1.15rem; margin-top: .35rem; text-align: center; word-break: break-word; line-height: 1.1; }
 .badge { font-size: .9rem; color: var(--niebla); font-weight: 800; }
 .pcard.ready .badge, .pcard.done .badge { color: var(--lima-oscura); }
-.pcard.slot { background: transparent; border: 3px dashed rgba(236, 226, 182, .5); border-radius: 14px; color: var(--lienzo); }
-.pcard.slot .avatar { background: transparent; border: 3px dashed rgba(236, 226, 182, .5); color: rgba(236, 226, 182, .7); box-shadow: none; }
+.pcard.slot { background: rgba(250, 244, 222, .25); border: 3px dashed rgba(59, 63, 102, .45); border-radius: 14px; color: var(--sobre-fondo); }
+.pcard.slot .avatar { background: transparent; border: 3px dashed rgba(59, 63, 102, .45); color: rgba(59, 63, 102, .6); box-shadow: none; }
 
 .avatar {
   border-radius: 50%; background: #fbf7e6; object-fit: cover;
@@ -171,11 +173,11 @@ img.avatar { border: 3px solid var(--pizarra); box-shadow: 3px 4px 0 -1px rgba(3
 .avatar.tiny { width: 36px; height: 36px; font-size: 1rem; border-width: 2px; vertical-align: middle; }
 
 /* ---------- Fases ---------- */
-.stage { padding: 2rem 3rem; min-height: 100vh; color: var(--lienzo); }
+.stage { padding: 2rem 3rem; min-height: 100vh; color: var(--sobre-fondo); }
 .stage-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-.stage-head h2 { font-size: clamp(2.2rem, 4.4vw, 3.8rem); text-shadow: 4px 5px 0 rgba(30, 34, 64, .7); }
+.stage-head h2 { font-size: clamp(2.2rem, 4.4vw, 3.8rem); color: var(--indigo); text-shadow: var(--halo), 4px 5px 0 rgba(59, 63, 102, .25); }
 .stage-head h2 small { display: block; font-size: .36em; margin-top: .35em; opacity: .9; }
-.stage-sub { font-size: 1.5rem; font-weight: 800; text-shadow: 0 2px 0 rgba(30, 34, 60, .7); }
+.stage-sub { font-size: 1.5rem; font-weight: 800; text-shadow: var(--halo); }
 
 .timer {
   min-width: 112px; height: 112px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -254,7 +256,7 @@ img.avatar { border: 3px solid var(--pizarra); box-shadow: 3px 4px 0 -1px rgba(3
   animation: wobble 3s infinite; padding: .1em .2em;
 }
 .podium { display: flex; justify-content: center; align-items: flex-end; gap: 1.6rem; margin: 2rem 0; }
-.pod { display: flex; flex-direction: column; align-items: center; color: var(--lienzo); text-shadow: 0 2px 0 rgba(30, 34, 60, .7); }
+.pod { display: flex; flex-direction: column; align-items: center; color: var(--lienzo); }
 .pod .avatar { width: 112px; height: 112px; }
 .pod .block { width: 150px; border-radius: 10px 10px 0 0; font-family: var(--display); font-size: 3.2rem; color: var(--indigo); margin-top: .5rem; display: flex; align-items: flex-start; justify-content: center; padding-top: .3rem; text-shadow: none; }
 .pod.p1 { order: 2; } .pod.p1 .block { height: 180px; }
@@ -287,7 +289,7 @@ img.avatar { border: 3px solid var(--pizarra); box-shadow: 3px 4px 0 -1px rgba(3
 /* ---------- Móvil ---------- */
 body.player { padding: .9rem; }
 .player #app { max-width: 480px; margin: 0 auto; }
-.me { display: flex; align-items: center; gap: .5rem; color: var(--lienzo); font-size: 1.1rem; margin-bottom: .8rem; text-shadow: 0 2px 0 rgba(30, 34, 60, .7); }
+.me { display: flex; align-items: center; gap: .5rem; color: var(--sobre-fondo); font-size: 1.1rem; margin-bottom: .8rem; text-shadow: var(--halo); }
 .me .score { margin-left: auto; background: linear-gradient(172deg, #f3df8e, #e9c15f 70%, #d98a62); color: var(--tinta); border-radius: 999px; padding: .05rem .8rem; font-size: 1rem; text-shadow: none; box-shadow: 2px 3px 0 -1px rgba(34, 38, 72, .45); }
 .card { border-radius: 18px; padding: 1.3rem 1.2rem; text-align: center; }
 .card h2 { font-size: 1.9rem; color: var(--indigo); }

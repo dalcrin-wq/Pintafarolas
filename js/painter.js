@@ -10,22 +10,24 @@
 
 // Rampas de sombra (0) a luz (1). La banda central es la transición saturada.
 const RAMPS = {
-  tarde: ["#1f2436", "#2b3447", "#3f4b60", "#58658a", "#a8577e", "#c98a5a", "#d9bb6a", "#e9dfb4"],
-  manana: ["#1c2830", "#283e46", "#3a5a60", "#3d8088", "#9fb43c", "#cfc56c", "#e0d79c", "#ece8c8"],
-  noche: ["#171b2a", "#222842", "#33395c", "#4c4f8c", "#b4527e", "#d8925a", "#e8cb7a", "#f1e2ad"],
-  fiesta: ["#21263a", "#2f3858", "#465190", "#5f62b0", "#d0577f", "#e09a58", "#ebcd70", "#f2e6bb"],
+  // Sombras: gris azulado y verde salvia (frías, nunca negras). Luces: oro y crema.
+  // La transición pasa por verdes lima, con algún rosa suelto.
+  tarde: ["#4a5a70", "#587286", "#628a8a", "#7fa37c", "#b3c445", "#e2c568", "#eedb9e", "#f5edd2"],
+  manana: ["#46606a", "#53787c", "#609488", "#7db182", "#b9cc3e", "#ded77e", "#ece6ac", "#f6f2da"],
+  noche: ["#3b4866", "#475d7c", "#527590", "#5f8f98", "#a6b84a", "#e2b064", "#efd184", "#f6e9bc"],
+  fiesta: ["#4c5e86", "#5a76a2", "#6698a4", "#88b67e", "#b9c245", "#eaa95e", "#f2d676", "#f8eec8"],
 };
 
 // Escena: luz (x, y en fracción de pantalla), alcance de la luz y rampa.
 const SCENES = {
-  menu: { light: [0.5, 0.38], spread: 0.78, ramp: "tarde" },
+  menu: { light: [0.5, 0.38], spread: 0.95, ramp: "tarde" },
   settings: { light: [0.5, 0.3], spread: 0.8, ramp: "tarde" },
   lobby: { light: [0.2, 0.32], spread: 0.85, ramp: "tarde" },
   join: { light: [0.5, 0.3], spread: 0.85, ramp: "tarde" },
   drawing: { light: [0.78, 0.18], spread: 0.95, ramp: "manana" },
-  lying: { light: [0.28, 0.45], spread: 0.62, ramp: "noche" },
-  voting: { light: [0.28, 0.45], spread: 0.62, ramp: "noche" },
-  reveal: { light: [0.5, 0.42], spread: 0.6, ramp: "noche" },
+  lying: { light: [0.28, 0.45], spread: 0.8, ramp: "noche" },
+  voting: { light: [0.28, 0.45], spread: 0.8, ramp: "noche" },
+  reveal: { light: [0.5, 0.42], spread: 0.8, ramp: "noche" },
   scores: { light: [0.5, 0.22], spread: 0.85, ramp: "tarde" },
   end: { light: [0.5, 0.35], spread: 0.95, ramp: "fiesta" },
   locked: { light: [0.5, 0.3], spread: 0.7, ramp: "noche" },
@@ -80,8 +82,8 @@ function paint(canvas, sceneName, seed = 7) {
     const d = Math.hypot(x - lx, (y - ly) * 1.25) / (diag * scene.spread);
     const base = 1 - Math.pow(Math.min(1, d), 0.85);
     const n = noise(x / 260, y / 260) - 0.5 + (noise(x / 90 + 40, y / 90) - 0.5) * 0.4;
-    const ground = Math.max(0, y / H - 0.72) * 0.35; // la parte baja, en sombra
-    return Math.min(1, Math.max(0, base * 0.9 + n * 0.3 - 0.06 - ground));
+    const ground = Math.max(0, y / H - 0.75) * 0.25; // la parte baja, algo en sombra
+    return Math.min(1, Math.max(0, 0.2 + base * 0.78 + n * 0.3 - ground));
   };
   // Dirección del trazo: un campo suave que gira alrededor de la luz.
   // Dirección del trazo: diagonal de base, y cada zona del cuadro con su propia inclinación
@@ -144,10 +146,10 @@ function paint(canvas, sceneName, seed = 7) {
     }
   }
   // 5) Chispas de color complementario, pocas (el verde y el cobalto de las referencias).
-  const sparks = [[182, 201, 58], [68, 101, 178], [222, 93, 132]];
+  const sparks = [[182, 201, 58], [182, 201, 58], [68, 101, 178], [222, 93, 132]];
   for (let i = 0, n = Math.round(70 * scale * scale); i < n; i++) {
     const x = rand() * W, y = rand() * H, v = value(x, y);
-    if (v < 0.3 || v > 0.75) continue;
+    if (v < 0.35 || v > 0.85) continue;
     const c = sparks[(rand() * sparks.length) | 0];
     ctx.strokeStyle = `rgba(${c},${0.35 + rand() * 0.4})`;
     ctx.lineWidth = (5 + rand() * 7) * scale;
@@ -159,8 +161,8 @@ function paint(canvas, sceneName, seed = 7) {
   }
   // 6) Viñeta fría: los bordes del cuadro se van a la sombra (azulada, nunca negra).
   const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, diag * 0.62);
-  vg.addColorStop(0, "rgba(32,37,64,0)");
-  vg.addColorStop(1, "rgba(32,37,64,.55)");
+  vg.addColorStop(0, "rgba(60,76,110,0)");
+  vg.addColorStop(1, "rgba(60,76,110,.3)");
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
 }
