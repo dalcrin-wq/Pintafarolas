@@ -717,7 +717,16 @@ function markOut(o, still = false) {
   if (!li) return;
   li.querySelector(".stamp").textContent = o.kind === "house" ? "De la casa" : "Nadie picó";
   li.classList.add("fuera");
-  if (still) li.classList.add("still");
+  if (still) { li.classList.add("still", "ida"); return; }
+  // Tiembla, se cae del tendedero y el hueco se cierra: fuera de la lista.
+  setTimeout(() => {
+    if (!li.isConnected) return;
+    const cs = getComputedStyle(li);
+    li.animate([
+      { height: `${li.offsetHeight}px`, marginBottom: cs.marginBottom, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom },
+      { height: "0px", marginBottom: "0px", paddingTop: "0px", paddingBottom: "0px" },
+    ], { duration: 450, easing: "ease-in-out" }).onfinish = () => li.classList.add("ida");
+  }, 1850);
 }
 
 function markLie(o, still = false) {
@@ -752,14 +761,15 @@ function pointsRows() {
 
 function renderPoints(still = false) {
   const r = state.results;
-  const rows = pointsRows().sort((a, b) => b.gain - a.gain);
+  const rows = pointsRows().sort((a, b) => (b.gain - a.gain) || a.p.name.localeCompare(b.p.name));
+  const puesto = (g) => 1 + rows.filter((x) => x.gain > g).length;
   const title = r.last ? `Fin de la ronda ${r.round} de ${r.rounds}` : `Dibujo ${state.current.index} de ${state.current.total}`;
   app.innerHTML = `
     <section class="stage marcador">
       <header class="stage-head"><h2 id="board-title">Puntos de este dibujo <small>${title}</small></h2></header>
       <div class="board" id="board">${rows.map(({ p, gain, prev }, i) => `
         <div class="brow" data-uid="${p.uid}" style="animation-delay:${(i * 0.09).toFixed(2)}s">
-          <span class="pos">${i + 1}</span>${avatarHTML(p, "tiny")}
+          <span class="pos">${puesto(gain)}</span>${avatarHTML(p, "tiny")}
           <span class="pname">${esc(p.name)}</span>
           <span class="gain ${gain ? "" : "cero"}" data-gain="${gain}">${still ? `+${gain}` : "+0"}</span>
           <span class="move"></span>
@@ -790,6 +800,8 @@ function runSum() {
   const before = rank("prev");
   rows.forEach((x) => { x.total = x.prev + x.gain; });
   const after = rank("total");
+  // Puesto con empates: 1, 1, 3…
+  const puesto = (key, v) => 1 + rows.filter((y) => y[key] > v).length;
   const t = $("#board-title");
   if (t) t.removeAttribute("data-dance");
   if (t) t.innerHTML = `La clasificación <small>${r.last ? `Fin de la ronda ${r.round} de ${r.rounds}` : `Tras el dibujo ${state.current.index} de ${state.current.total}`}</small>`;
@@ -804,18 +816,23 @@ function runSum() {
   setTimeout(() => {
     if (!board.isConnected) return;
     const first = new Map([...board.children].map((el) => [el.dataset.uid, el.getBoundingClientRect().top]));
+    const top = rows.find((y) => y.p.uid === after[0]);
+    const soloEnCabeza = top.total > 0 && rows.filter((y) => y.total === top.total).length === 1;
     after.forEach((uid) => board.appendChild(board.querySelector(`[data-uid="${uid}"]`)));
     [...board.children].forEach((el, i) => {
       const dy = first.get(el.dataset.uid) - el.getBoundingClientRect().top;
       if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }], { duration: 700, easing: "cubic-bezier(.3,1.3,.5,1)" });
-      el.querySelector(".pos").textContent = i + 1;
-      const was = before.indexOf(el.dataset.uid);
+      const x = rows.find((y) => y.p.uid === el.dataset.uid);
+      const now = puesto("total", x.total), was = puesto("prev", x.prev);
+      el.querySelector(".pos").textContent = now;
       const mv = el.querySelector(".move");
-      mv.textContent = was > i ? `▲${was - i}` : was < i ? `▼${i - was}` : "";
-      mv.className = `move ${was > i ? "sube" : was < i ? "baja" : ""}`;
-      el.classList.toggle("lider", i === 0 && rows.find((y) => y.p.uid === el.dataset.uid).total > 0);
+      mv.textContent = was > now ? `▲${was - now}` : was < now ? `▼${now - was}` : "";
+      mv.className = `move ${was > now ? "sube" : was < now ? "baja" : ""}`;
+      el.classList.toggle("lider", now === 1 && soloEnCabeza);
     });
-    const newLeader = after[0] !== before[0] && rows.find((y) => y.p.uid === after[0]).total > 0 && rows.some((y) => y.prev > 0);
+    const antes = rows.find((y) => y.p.uid === before[0]);
+    const lideraba = antes.prev > 0 && rows.filter((y) => y.prev === antes.prev).length === 1 ? antes.p.uid : null;
+    const newLeader = soloEnCabeza && top.p.uid !== lideraba && rows.some((y) => y.prev > 0);
     if (newLeader) {
       board.querySelector(".lider")?.classList.add("nuevo");
       Voice.say("lider", { interrupt: true });

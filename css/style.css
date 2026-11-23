@@ -176,7 +176,7 @@ img.avatar { border: 3px solid var(--pizarra); box-shadow: 3px 4px 0 -1px rgba(3
 .avatar.tiny { width: 36px; height: 36px; font-size: 1rem; border-width: 2px; vertical-align: middle; }
 
 /* ---------- Fases ---------- */
-.stage { padding: 2rem 3rem; min-height: 100vh; color: var(--sobre-fondo); }
+.stage { padding: 2rem 3rem; min-height: 100vh; color: var(--sobre-fondo); overflow-x: clip; }
 .stage-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .stage-head h2 { font-size: clamp(2.2rem, 4.4vw, 3.8rem); color: var(--indigo); text-shadow: var(--halo), 4px 5px 0 rgba(59, 63, 102, .25); }
 .stage-head h2 small { display: block; font-size: .36em; margin-top: .35em; opacity: .9; }
@@ -328,6 +328,7 @@ body.player { padding: .9rem; }
 .dance-gradient .l { -webkit-background-clip: text; background-clip: text; color: transparent; background-repeat: no-repeat; }
 
 /* ---------- El destape (por actos) ---------- */
+.reveal-opts { padding-right: 1.2rem; }
 .reveal-opts li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .3rem .8rem; transition: opacity .5s, transform .5s, filter .5s; }
 .reveal-opts .opt-text { grid-column: 1; }
 .reveal-opts .gain-badge { grid-column: 2; grid-row: 1; justify-self: end; font-family: var(--display); font-size: 1.3rem; color: var(--lima-oscura); }
@@ -351,8 +352,8 @@ body.player { padding: .9rem; }
 .reveal-opts li.fuera { animation: tiembla .45s ease-in-out, cae .9s .9s ease-in forwards; }
 .reveal-opts li.fuera .stamp { background: var(--niebla); }
 @keyframes tiembla { 20%, 60% { transform: rotate(-2deg) translateX(-6px); } 40%, 80% { transform: rotate(2deg) translateX(6px); } }
-@keyframes cae { to { transform: translateY(26px) rotate(-4deg); opacity: .28; filter: saturate(0) blur(.5px); } }
-.reveal-opts li.fuera.still { animation: none; transform: translateY(26px) rotate(-4deg); opacity: .28; filter: saturate(0); }
+@keyframes cae { 30% { transform: translate(-4px, -10px) rotate(3deg); } to { transform: translate(60px, 70px) rotate(-14deg); opacity: 0; filter: saturate(0) blur(1px); } }
+.reveal-opts li.ida { display: none; }
 
 /* 2) Mentira que coló, 3) la verdad */
 .reveal-opts li.apagada { opacity: .45; filter: saturate(.4); }
