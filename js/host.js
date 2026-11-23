@@ -29,6 +29,7 @@ const app = $("#app");
 let settings = loadSettings();
 let me = null, code = null, roomRef = null, state = null, unsub = null;
 let endLive = false;
+let tickedAt = "";
 let viewKey = "", timer = null, advancedFor = -1;
 let revealTimers = [], usedPrompts = new Set(), knownPlayers = new Map(), primed = false;
 let cues = { pid: -1, half: false, last10: false }, lobbyQuietSince = Date.now(), lobbyNags = 0, wasReady = false;
@@ -282,10 +283,12 @@ function onEnterPhase() {
   switch (state.phase) {
     case "lobby": Music.partySoon(); lobbyQuietSince = Date.now(); lobbyNags = 0; wasReady = false; break;
     case "drawing": {
-      Music.play("dibujo");
       const r = state.round, total = state.settings?.rounds || 1;
-      if (r === 1) Sfx.play("jugar"); // ¡empieza la partida!
       Voice.say(r === 1 ? "empieza" : r === total ? "ultima" : "dibujo", { interrupt: true });
+      // Recién empezada (no al recargar a mitad): el reparto con su tic-tic-tic; luego la música.
+      if (state.deadline - serverNow() > (state.settings.drawTime - 3) * 1000) runReparto();
+      else app.querySelectorAll(".hoja").forEach((h) => h.classList.add("cuelga"));
+      if (!$("#reparto") || $("#reparto").hidden) Music.play("dibujo");
       break;
     }
     case "lying": Music.play("dibujo"); Voice.say("mentir", { interrupt: true }); break;
@@ -591,21 +594,92 @@ function renderLobbyPlayers() {
       + ` Con ${n} jugadores: ${rondasPara(n)} ${rondasPara(n) === 1 ? "ronda" : "rondas"}, ${n * rondasPara(n)} dibujos.`;
 }
 
+// ---------- Dibujar: tendedero con una hoja por jugador ----------
+const CHISTES = [
+  "Los palitos también cuentan como arte.",
+  "Aquí dibujar mal no resta. Mentir mal, sí.",
+  "Si no sabes dibujarlo, dibuja otra cosa con seguridad.",
+  "Un círculo y dos rayas: ya es una persona.",
+  "Picasso también empezó así. Más o menos.",
+  "Cuanto más raro, más fácil colar una mentira.",
+  "Las flechas y las palabras están prohibidas. Las intenciones, no.",
+  "Nadie va a enmarcar esto. Tranquilidad.",
+  "El tiempo corre. El talento, no tanto.",
+  "Pista: los demás tampoco saben dibujar.",
+];
+const hue = (uid = "") => { let h = 7; for (const ch of uid) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; };
+const GARABATOS = [
+  "M14 40 C 30 10, 44 70, 60 34 S 84 20, 90 46",
+  "M18 30 L 40 62 L 54 24 L 76 58 L 88 30",
+  "M20 50 C 20 20, 60 20, 56 46 S 30 70, 52 70 S 86 52, 84 30",
+];
+let chisteTimer = null;
+
 function renderDrawing() {
+  const ps = active();
   app.innerHTML = `
-    <section class="stage">
-      <header class="stage-head">
-        <h2>¡A dibujar! <small>Ronda ${state.round} de ${state.settings.rounds}</small></h2>
+    <section class="stage dibujo">
+      <header class="dib-head">
+        <p class="dib-ronda">Ronda ${state.round} de ${state.settings.rounds}</p>
+        <h2 id="dib-titulo">Todos a dibujar</h2>
         <div class="timer" data-timer></div>
       </header>
-      <p class="stage-sub">Mirad el móvil: cada uno tiene una frase secreta.</p>
-      <div class="players progress" id="progress"></div>
+      <div class="tendedero" style="--n:${ps.length}">
+        <svg class="cuerda" viewBox="0 0 1000 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 8 Q 500 70 1000 8"/></svg>
+        <div class="hojas">${ps.map((p, i) => `
+          <figure class="hoja" data-uid="${p.uid}" style="--rot:${(i % 2 ? 1 : -1) * (1.5 + (i % 3))}deg; --h:${hue(p.uid)}; --d:${(i * 0.09).toFixed(2)}s">
+            <span class="pinza"></span>
+            <div class="papel">
+              <div class="cara frente"><svg viewBox="0 0 100 90" aria-hidden="true"><path d="${GARABATOS[i % GARABATOS.length]}"/></svg></div>
+              <div class="cara dorso"><span class="check">✓</span></div>
+            </div>
+            <figcaption>${avatarHTML(p, "tiny")} ${esc(p.name)}</figcaption>
+          </figure>`).join("")}
+        </div>
+      </div>
+      <div class="entregas"><div class="entregas-barra"><i id="entregas-i"></i></div><span id="entregas-n"></span></div>
+      <p class="chiste" id="chiste">${CHISTES[Math.floor(Math.random() * CHISTES.length)]}</p>
+      <div class="lapiz" aria-hidden="true"><div class="lapiz-cuerpo" id="lapiz"><span class="lapiz-goma"></span></div><span class="lapiz-punta"></span></div>
+      <div class="reparto" id="reparto" hidden></div>
     </section>`;
-  renderProgress();
+  clearInterval(chisteTimer);
+  chisteTimer = setInterval(() => {
+    const el = $("#chiste");
+    if (!el) return clearInterval(chisteTimer);
+    el.animate([{ opacity: 1 }, { opacity: 0, transform: "translateY(-8px)" }], { duration: 350, fill: "forwards" }).onfinish = () => {
+      el.textContent = CHISTES[Math.floor(Math.random() * CHISTES.length)];
+      el.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 350, fill: "forwards" });
+    };
+  }, 7000);
+  renderProgress(true);
 }
 
-function renderProgress() {
+// Reparto de frases al empezar la ronda: las hojas «vuelan» a su sitio, tic-tic-tic y a dibujar.
+function runReparto() {
+  const box = $("#reparto");
+  if (!box) return;
+  box.hidden = false;
+  box.innerHTML = `<div class="reparto-carta"><p class="reparto-k">Ronda ${state.round} de ${state.settings.rounds}</p>
+    <p class="reparto-t">Repartiendo frases secretas</p><p class="reparto-dots"><i></i><i></i><i></i></p></div>`;
+  Sfx.play("entrega");
+  const dots = box.querySelectorAll(".reparto-dots i");
+  [0, 1, 2].forEach((i) => later2(500 + i * 420, () => { dots[i]?.classList.add("on"); Sfx.play("tic"); }));
+  later2(1900, () => {
+    box.classList.add("fuera");
+    Sfx.play("revelar");
+    app.querySelectorAll(".hoja").forEach((h, i) => later2(i * 90, () => { h.classList.add("cuelga"); Sfx.play("pop", { vol: 0.7 }); }));
+  });
+  later2(2500, () => { box.hidden = true; Music.play("dibujo"); });
+}
+
+function later2(ms, fn) {
+  const pid = state.phaseId;
+  revealTimers.push(setTimeout(() => { if (state?.phaseId === pid) fn(); }, ms));
+}
+
+function renderProgress(first = false) {
   const s = state;
+  if (s.phase === "drawing") return renderHojas(first);
   const el = $("#progress");
   if (!el) return;
   let list = active();
@@ -620,6 +694,34 @@ function renderProgress() {
       ${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
       <span class="badge">${done(p.uid) ? "✓" : "…"}</span>
     </div>`).join("");
+}
+
+function renderHojas(first) {
+  const s = state;
+  const ps = active();
+  const done = ps.filter((p) => s.drawings?.[p.uid]);
+  const faltan = ps.filter((p) => !s.drawings?.[p.uid]);
+  for (const p of ps) {
+    const h = app.querySelector(`.hoja[data-uid="${p.uid}"]`);
+    if (!h) continue;
+    const ok = !!s.drawings?.[p.uid];
+    if (ok && !h.classList.contains("entregada")) {
+      h.classList.add("entregada");
+      if (!first) Sfx.play("entrega");
+    }
+  }
+  const t = $("#dib-titulo");
+  if (t) {
+    const nombres = (l) => l.map((p) => `<span class="nom" style="--h:${hue(p.uid)}">${esc(p.name)}</span>`);
+    const html = !done.length ? "Todos a dibujar"
+      : !faltan.length ? "¡Todos han entregado!"
+      : faltan.length > 3 ? `Faltan ${faltan.length}`
+      : `${faltan.length === 1 ? "Falta" : "Faltan"} ${nombres(faltan).join(faltan.length === 2 ? " y " : ", ").replace(/, ([^,]*)$/, " y $1")}`;
+    if (t.dataset.html !== html) { t.dataset.html = html; t.innerHTML = html; }
+  }
+  const i = $("#entregas-i"), n = $("#entregas-n");
+  if (i) i.style.width = `${(100 * done.length) / Math.max(1, ps.length)}%`;
+  if (n) n.textContent = `${done.length} de ${ps.length}`;
 }
 
 // La cartela de museo: cada obra con su técnica (siempre la misma para el mismo dibujo).
@@ -1073,11 +1175,21 @@ setInterval(() => {
   if (!state) return;
   if (state.phase === "lobby") return lobbyCues();
   if (!state.deadline) return;
-  const secs = Math.max(0, Math.ceil((state.deadline - serverNow()) / 1000));
+  const left = Math.max(0, state.deadline - serverNow());
+  const secs = Math.ceil(left / 1000);
   const t = document.querySelector("[data-timer]");
   if (t) {
     t.textContent = secs;
     t.classList.toggle("hurry", secs <= 10);
+  }
+  // El lápiz se gasta con el tiempo (dibujar, mentir y votar).
+  const total = { drawing: state.settings.drawTime, lying: state.settings.lieTime, voting: state.settings.voteTime }[state.phase];
+  const lapiz = document.getElementById("lapiz");
+  if (lapiz && total) lapiz.style.width = `${Math.min(100, (100 * left) / (total * 1000))}%`;
+  // Últimos 5 segundos: tic por segundo.
+  if (total && secs <= 5 && secs >= 1 && tickedAt !== `${state.phaseId}|${secs}`) {
+    tickedAt = `${state.phaseId}|${secs}`;
+    Sfx.play("tic", { vol: secs <= 2 ? 1 : 0.7 });
   }
   timeCues(secs);
 }, 250);
