@@ -1,28 +1,22 @@
-// Música: dos temas de ElevenLabs con la misma rejilla (ver track.js).
-// Tres maneras de sonar, y los cambios caen siempre en el siguiente compás:
-//  · «calma»:  los 4 primeros compases de la intro de la sala, en bucle. Sin bombo.
-//              Mientras habla la presentadora, al votar, al destapar.
-//  · «ciclo»:  entra el bombo y luego el tema de la sala entero en bucle, así que
-//              el subidón vuelve cada vuelta (como en la tele). Menú, sala, marcador.
-//  · «fiesta»: la parte con bombo del tema de dibujar, sin respiros. Fases con reloj.
-import { BPM, TRACKS } from "./track.js";
+// Música: seis temas de ElevenLabs (ver track.js). Modos:
+//  · «calma»:   los 4 primeros compases de la intro del tema de sala, en bucle. Sin bombo.
+//               Mientras la presentadora saluda.
+//  · «sala»:    los tres temas de sala encadenados, enteros: cada minuto uno distinto,
+//               y cada uno con su intro suave y su entrada del bombo.
+//  · «dibujo», «intriga», «fiesta»: bucles para dibujar, votar/destapar y el marcador/final.
+// Los cambios caen en el siguiente compás del tema que está sonando.
+import { TRACKS, SALA, barOf } from "./track.js";
 
 const MUSIC_VOL = 0.6;
 const DUCK_VOL = 0.24;
-const FADE = 0.03;
-const BAR = (4 * 60) / BPM;
+const FADE = 0.04;
 
-// modo → [tema, inicio del bucle, fin del bucle, por dónde se entra]
-const MODES = {
-  calma: (t = TRACKS.sala) => ["sala", t.start, t.calmEnd, t.start],
-  ciclo: (t = TRACKS.sala) => ["sala", t.start, t.end, t.drop],
-  fiesta: (t = TRACKS.dibujo) => ["dibujo", t.drop, t.end, t.drop],
-};
-
-let ctx = null, master = null, duckGain = null, loading = null;
-const buffers = {};
-let cur = null; // { src, gain, mode, a, b, pos0, t0 }
+let ctx = null, master = null, duckGain = null;
+const buffers = {}, loading = {};
+let cur = null; // { key, kind, src, gain, t0, pos0, loop:[a,b]|null }
 let mode = "calma";
+let salaIdx = Math.floor(Math.random() * SALA.length);
+let chainTimer = null;
 let pendingDrop = false, heardVoice = false, dropTimer = null, safetyTimer = null;
 
 function setup() {
@@ -33,62 +27,93 @@ function setup() {
   duckGain.connect(master).connect(ctx.destination);
 }
 
-function loadOne(key) {
-  return fetch(TRACKS[key].src)
-    .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-    .then((b) => new Promise((ok, ko) => ctx.decodeAudioData(b, ok, ko)))
-    .then((b) => { buffers[key] = b; })
-    .catch(() => {});
+function load(key) {
+  if (!loading[key]) {
+    loading[key] = fetch(TRACKS[key].src)
+      .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then((b) => new Promise((ok, ko) => ctx.decodeAudioData(b, ok, ko)))
+      .then((b) => { buffers[key] = b; })
+      .catch(() => {});
+  }
+  return loading[key];
 }
 
-function load() {
-  // La sala primero: es la que suena nada más empezar.
-  if (!loading) loading = loadOne("sala").then(() => { apply(); return loadOne("dibujo"); });
-  return loading;
+async function loadAll() {
+  await load(SALA[salaIdx]); // la que va a sonar primero
+  apply();
+  for (const k of ["dibujo", ...SALA, "intriga", "fiesta"]) await load(k);
 }
 
-// Dónde va la canción (segundos del archivo) en el instante t.
 function positionAt(t) {
   let p = cur.pos0 + (t - cur.t0);
-  if (p >= cur.b) p = cur.a + ((p - cur.b) % (cur.b - cur.a));
+  if (cur.loop && p >= cur.loop[1]) p = cur.loop[0] + ((p - cur.loop[1]) % (cur.loop[1] - cur.loop[0]));
   return p;
 }
 
 function nextBarTime() {
   const now = ctx.currentTime;
-  const into = (((positionAt(now) - TRACKS.sala.start) % BAR) + BAR) % BAR;
-  const wait = BAR - into;
-  return now + (wait < 0.08 ? wait + BAR : wait);
+  if (!cur) return now + 0.05;
+  const bar = barOf(cur.key);
+  const into = (((positionAt(now) - TRACKS[cur.key].start) % bar) + bar) % bar;
+  const wait = bar - into;
+  return now + (wait < 0.08 ? wait + bar : wait);
 }
 
-function startSource(m, when) {
-  const [key, a, b, offset] = MODES[m]();
+function startSource(key, kind, when, offset, loop) {
+  clearTimeout(chainTimer);
+  const t = TRACKS[key];
   const src = ctx.createBufferSource();
   src.buffer = buffers[key];
-  src.loop = true;
-  src.loopStart = a;
-  src.loopEnd = b;
+  if (loop) {
+    src.loop = true;
+    [src.loopStart, src.loopEnd] = loop;
+  }
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(0, when);
   gain.gain.linearRampToValueAtTime(1, when + FADE);
   src.connect(gain).connect(duckGain);
-  src.start(when, offset);
+  if (loop) src.start(when, offset);
+  else src.start(when, offset, Math.max(0.1, t.end - offset));
   if (cur) {
     const old = cur;
     old.gain.gain.setValueAtTime(1, when);
     old.gain.gain.linearRampToValueAtTime(0, when + FADE);
-    old.src.stop(when + FADE + 0.02);
+    try { old.src.stop(when + FADE + 0.02); } catch { /* ya parado */ }
   }
-  cur = { src, gain, mode: m, a, b, pos0: offset, t0: when };
+  cur = { key, kind, src, gain, t0: when, pos0: offset, loop };
+  // En la sala, cuando acaba un tema empieza el siguiente (con su intro y su subidón).
+  if (kind === "sala") {
+    const endAt = when + (t.end - offset);
+    chainTimer = setTimeout(() => {
+      if (cur?.src !== src || mode !== "sala") return;
+      const next = SALA[(salaIdx + 1) % SALA.length];
+      if (!buffers[next]) return;
+      salaIdx = (salaIdx + 1) % SALA.length;
+      startSource(next, "sala", endAt, 0, null);
+    }, Math.max(0, (endAt - ctx.currentTime - 1.2) * 1000));
+  }
 }
 
 function apply() {
   if (!ctx || !Music.playing) return;
-  // Si el tema de dibujar aún no ha llegado, tira de la sala con bombo.
-  const m = mode === "fiesta" && !buffers.dibujo ? "ciclo" : mode;
-  if (!buffers[MODES[m]()[0]]) return;
-  if (cur?.mode === m) return;
-  startSource(m, cur ? nextBarTime() : ctx.currentTime + 0.05);
+  if (cur?.kind === mode) return;
+  const salaKey = cur && (cur.kind === "sala" || cur.kind === "calma") ? cur.key : SALA[salaIdx];
+  const key = mode === "calma" || mode === "sala" ? salaKey : mode;
+  if (!buffers[key]) { load(key).then(apply); return; }
+  const when = nextBarTime();
+  const t = TRACKS[key];
+  if (mode === "calma") return startSource(key, "calma", when, t.start, [t.start, t.start + 4 * barOf(key)]);
+  if (mode === "sala") {
+    if (cur?.kind === "calma") return startSource(key, "sala", when, t.drop, null); // ¡bombo!
+    if (cur) { // venimos de otra fase: siguiente tema de la sala, desde su intro
+      const k = SALA[(salaIdx + 1) % SALA.length];
+      if (!buffers[k]) { load(k).then(apply); return; }
+      salaIdx = (salaIdx + 1) % SALA.length;
+      return startSource(k, "sala", when, 0, null);
+    }
+    return startSource(key, "sala", when, 0, null);
+  }
+  return startSource(key, mode, when, t.start, [t.start, t.end]);
 }
 
 function setMode(m) {
@@ -104,18 +129,19 @@ function clearDrop() {
 
 export const Music = {
   playing: false,
-  async start() {
+  start() {
     if (this.playing) return;
     if (!ctx) setup();
     ctx.resume();
     this.playing = true;
-    await load();
+    loadAll();
     apply();
   },
   stop() {
     this.playing = false;
     clearDrop();
-    if (cur) { cur.src.stop(); cur = null; }
+    clearTimeout(chainTimer);
+    if (cur) { try { cur.src.stop(); } catch { /* ya parado */ } cur = null; }
   },
   /** Intro suave ya; el bombo entra cuando la presentadora acabe de hablar. */
   calmUntilVoiceEnds() {
@@ -127,14 +153,11 @@ export const Music = {
     dropTimer = setTimeout(() => { if (pendingDrop && !heardVoice) this.party(); }, 4000);
     safetyTimer = setTimeout(() => { if (pendingDrop) this.party(); }, 20000);
   },
-  /** Intro suave hasta nuevo aviso (votar, destapar…). */
-  calm() { clearDrop(); setMode("calma"); },
-  /** Tema de la sala entero en bucle: el subidón vuelve en cada vuelta. */
-  party() { clearDrop(); setMode("ciclo"); },
+  /** Música de una fase: "sala", "dibujo", "intriga" o "fiesta". */
+  play(m) { clearDrop(); setMode(m); },
+  party() { this.play("sala"); },
   /** Como party(), pero si aún esperamos a que se calle, que acabe de hablar primero. */
   partySoon() { if (!pendingDrop) this.party(); },
-  /** Tema de dibujar, solo la parte con bombo: para las fases con reloj. */
-  drive() { clearDrop(); setMode("fiesta"); },
   /** Lo llama la voz: empieza a hablar (on) o se ha callado (off). */
   duck(on) {
     if (on) heardVoice = true;
@@ -144,13 +167,14 @@ export const Music = {
     if (pendingDrop && heardVoice) this.party();
   },
   /** Dónde está el ritmo ahora: para que las letras bailen a tempo.
-   *  phase: 0–1 dentro de un ciclo de 2 negras; intense: ya suena el bombo. */
+   *  phase: 0–1 dentro de un ciclo de 2 negras; intense: suena el bombo. */
   groove() {
     if (!ctx || !cur || !this.playing) return null;
-    const beat = 60 / BPM;
+    const t = TRACKS[cur.key];
+    const beat = 60 / t.bpm;
     const p = positionAt(ctx.currentTime);
-    const into = (((p - TRACKS.sala.start) % (2 * beat)) + 2 * beat) % (2 * beat);
-    const intense = cur.mode === "fiesta" || (cur.mode === "ciclo" && p >= TRACKS.sala.drop - 0.05);
+    const into = (((p - t.start) % (2 * beat)) + 2 * beat) % (2 * beat);
+    const intense = cur.kind === "dibujo" || cur.kind === "fiesta" || (cur.kind === "sala" && p >= t.drop - 0.05);
     return { beat, phase: into / (2 * beat), intense };
   },
 };

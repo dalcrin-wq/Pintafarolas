@@ -243,17 +243,17 @@ function onEnterPhase() {
   switch (state.phase) {
     case "lobby": Music.partySoon(); lobbyQuietSince = Date.now(); lobbyNags = 0; wasReady = false; break;
     case "drawing": {
-      Music.drive();
+      Music.play("dibujo");
       const r = state.round, total = state.settings?.rounds || 1;
       Voice.say(r === 1 ? "empieza" : r === total ? "ultima" : "dibujo", { interrupt: true });
       break;
     }
-    case "lying": Music.drive(); Voice.say("mentir", { interrupt: true }); break;
-    case "voting": Music.calm(); Voice.say("votar", { interrupt: true }); break;
-    case "reveal": Music.calm(); runReveal(); break;
-    // Marcador y final: se baja la música para leerlo y el bombo vuelve al acabar.
-    case "scores": Music.calmUntilVoiceEnds(); Voice.say("marcador", { interrupt: true }); break;
-    case "end": Music.calmUntilVoiceEnds(); Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true }); break;
+    case "lying": Music.play("dibujo"); Voice.say("mentir", { interrupt: true }); break;
+    case "voting": Music.play("intriga"); Voice.say("votar", { interrupt: true }); break;
+    case "reveal": Music.play("intriga"); runReveal(); break;
+    // Marcador y final: música de fiesta (la voz la baja mientras habla).
+    case "scores": Music.play("fiesta"); Voice.say("marcador", { interrupt: true }); break;
+    case "end": Music.play("fiesta"); Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true }); break;
   }
 }
 
