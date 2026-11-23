@@ -56,7 +56,7 @@ function pickCode(moment) {
 
 function playNext() {
   if (current) return;
-  if (!queue.length) { Music.duck(false); return; }
+  if (!queue.length) { Music.duck(false); Music.voiceIdle(); return; }
   const code = queue.shift();
   const audio = new Audio(`audio/voz/${code}.mp3`);
   current = audio;

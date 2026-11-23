@@ -1,102 +1,146 @@
-// Música chiptune generada en el navegador: sin archivos ni derechos de autor.
-const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+// Música: dos temas de ElevenLabs con la misma rejilla (ver track.js).
+// Tres maneras de sonar, y los cambios caen siempre en el siguiente compás:
+//  · «calma»:  los 4 primeros compases de la intro de la sala, en bucle. Sin bombo.
+//              Mientras habla la presentadora, al votar, al destapar.
+//  · «ciclo»:  entra el bombo y luego el tema de la sala entero en bucle, así que
+//              el subidón vuelve cada vuelta (como en la tele). Menú, sala, marcador.
+//  · «fiesta»: la parte con bombo del tema de dibujar, sin respiros. Fases con reloj.
+import { BPM, TRACKS } from "./track.js";
 
-// Do – Lam – Fa – Sol, el progreso más alegre y desvergonzado del pop.
-const CHORDS = [
-  [60, 64, 67, 72],
-  [57, 60, 64, 69],
-  [53, 57, 60, 65],
-  [55, 59, 62, 67],
-];
-const BASS = [36, 33, 29, 31];
-const BASS_STEPS = new Set([0, 3, 6, 8, 11, 14]);
-const ARP = [0, 1, 2, 3, 2, 1, 2, 3, 0, 2, 1, 3, 2, 1, 3, 2];
+const MUSIC_VOL = 0.6;
+const DUCK_VOL = 0.24;
+const FADE = 0.03;
+const BAR = (4 * 60) / BPM;
 
-let ctx = null, master = null, noise = null;
-let timer = null, step = 0, nextTime = 0;
-const BPM = 116;
-const STEP = 60 / BPM / 4;
+// modo → [tema, inicio del bucle, fin del bucle, por dónde se entra]
+const MODES = {
+  calma: (t = TRACKS.sala) => ["sala", t.start, t.calmEnd, t.start],
+  ciclo: (t = TRACKS.sala) => ["sala", t.start, t.end, t.drop],
+  fiesta: (t = TRACKS.dibujo) => ["dibujo", t.drop, t.end, t.drop],
+};
+
+let ctx = null, master = null, duckGain = null, loading = null;
+const buffers = {};
+let cur = null; // { src, gain, mode, a, b, pos0, t0 }
+let mode = "calma";
+let pendingDrop = false, heardVoice = false, dropTimer = null, safetyTimer = null;
 
 function setup() {
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   master = ctx.createGain();
-  master.gain.value = 0.11;
-  const lp = ctx.createBiquadFilter();
-  lp.type = "lowpass";
-  lp.frequency.value = 3200;
-  master.connect(lp).connect(ctx.destination);
-  noise = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
-  const d = noise.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  master.gain.value = MUSIC_VOL;
+  duckGain = ctx.createGain();
+  duckGain.connect(master).connect(ctx.destination);
 }
 
-function tone(freq, t, dur, type, vol) {
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.type = type;
-  o.frequency.value = freq;
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(master);
-  o.start(t);
-  o.stop(t + dur + 0.02);
+function loadOne(key) {
+  return fetch(TRACKS[key].src)
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+    .then((b) => new Promise((ok, ko) => ctx.decodeAudioData(b, ok, ko)))
+    .then((b) => { buffers[key] = b; })
+    .catch(() => {});
 }
 
-function kick(t) {
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.frequency.setValueAtTime(150, t);
-  o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
-  g.gain.setValueAtTime(0.9, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-  o.connect(g).connect(master);
-  o.start(t);
-  o.stop(t + 0.16);
+function load() {
+  // La sala primero: es la que suena nada más empezar.
+  if (!loading) loading = loadOne("sala").then(() => { apply(); return loadOne("dibujo"); });
+  return loading;
 }
 
-function hat(t) {
-  const s = ctx.createBufferSource();
-  s.buffer = noise;
-  const hp = ctx.createBiquadFilter();
-  hp.type = "highpass";
-  hp.frequency.value = 7000;
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(0.25, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-  s.connect(hp).connect(g).connect(master);
-  s.start(t);
-  s.stop(t + 0.06);
+// Dónde va la canción (segundos del archivo) en el instante t.
+function positionAt(t) {
+  let p = cur.pos0 + (t - cur.t0);
+  if (p >= cur.b) p = cur.a + ((p - cur.b) % (cur.b - cur.a));
+  return p;
 }
 
-function schedule() {
-  while (nextTime < ctx.currentTime + 0.12) {
-    const bar = Math.floor(step / 16) % 4;
-    const s = step % 16;
-    const chord = CHORDS[bar];
-    if (BASS_STEPS.has(s)) tone(mtof(BASS[bar]), nextTime, STEP * 1.8, "square", 0.22);
-    tone(mtof(chord[ARP[s]] + 12), nextTime, STEP * 0.9, "triangle", 0.16);
-    if (s % 8 === 0) kick(nextTime);
-    if (s % 4 === 2) hat(nextTime);
-    nextTime += STEP;
-    step++;
+function nextBarTime() {
+  const now = ctx.currentTime;
+  const into = (((positionAt(now) - TRACKS.sala.start) % BAR) + BAR) % BAR;
+  const wait = BAR - into;
+  return now + (wait < 0.08 ? wait + BAR : wait);
+}
+
+function startSource(m, when) {
+  const [key, a, b, offset] = MODES[m]();
+  const src = ctx.createBufferSource();
+  src.buffer = buffers[key];
+  src.loop = true;
+  src.loopStart = a;
+  src.loopEnd = b;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(1, when + FADE);
+  src.connect(gain).connect(duckGain);
+  src.start(when, offset);
+  if (cur) {
+    const old = cur;
+    old.gain.gain.setValueAtTime(1, when);
+    old.gain.gain.linearRampToValueAtTime(0, when + FADE);
+    old.src.stop(when + FADE + 0.02);
   }
+  cur = { src, gain, mode: m, a, b, pos0: offset, t0: when };
+}
+
+function apply() {
+  if (!ctx || !Music.playing) return;
+  // Si el tema de dibujar aún no ha llegado, tira de la sala con bombo.
+  const m = mode === "fiesta" && !buffers.dibujo ? "ciclo" : mode;
+  if (!buffers[MODES[m]()[0]]) return;
+  if (cur?.mode === m) return;
+  startSource(m, cur ? nextBarTime() : ctx.currentTime + 0.05);
+}
+
+function setMode(m) {
+  mode = m;
+  apply();
+}
+
+function clearDrop() {
+  pendingDrop = false;
+  clearTimeout(dropTimer);
+  clearTimeout(safetyTimer);
 }
 
 export const Music = {
   playing: false,
-  start() {
+  async start() {
     if (this.playing) return;
     if (!ctx) setup();
     ctx.resume();
-    nextTime = ctx.currentTime + 0.05;
-    timer = setInterval(schedule, 25);
     this.playing = true;
+    await load();
+    apply();
   },
   stop() {
-    clearInterval(timer);
     this.playing = false;
+    clearDrop();
+    if (cur) { cur.src.stop(); cur = null; }
   },
+  /** Intro suave ya; el bombo entra cuando la presentadora acabe de hablar. */
+  calmUntilVoiceEnds() {
+    clearDrop();
+    setMode("calma");
+    pendingDrop = true;
+    heardVoice = false;
+    // Si no llega a hablar (voz apagada o sin audio), no nos quedamos sin fiesta.
+    dropTimer = setTimeout(() => { if (pendingDrop && !heardVoice) this.party(); }, 4000);
+    safetyTimer = setTimeout(() => { if (pendingDrop) this.party(); }, 20000);
+  },
+  /** Intro suave hasta nuevo aviso (votar, destapar…). */
+  calm() { clearDrop(); setMode("calma"); },
+  /** Tema de la sala entero en bucle: el subidón vuelve en cada vuelta. */
+  party() { clearDrop(); setMode("ciclo"); },
+  /** Como party(), pero si aún esperamos a que se calle, que acabe de hablar primero. */
+  partySoon() { if (!pendingDrop) this.party(); },
+  /** Tema de dibujar, solo la parte con bombo: para las fases con reloj. */
+  drive() { clearDrop(); setMode("fiesta"); },
+  /** Lo llama la voz: empieza a hablar (on) o se ha callado (off). */
   duck(on) {
-    if (master) master.gain.setTargetAtTime(on ? 0.04 : 0.11, ctx.currentTime, 0.2);
+    if (on) heardVoice = true;
+    if (duckGain) duckGain.gain.setTargetAtTime(on ? DUCK_VOL / MUSIC_VOL : 1, ctx.currentTime, 0.25);
+  },
+  voiceIdle() {
+    if (pendingDrop && heardVoice) this.party();
   },
 };

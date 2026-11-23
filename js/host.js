@@ -46,6 +46,8 @@ function unlockAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;
   if (settings.music) Music.start();
+  // Como en la tele: base suave mientras saluda, y al callarse entra el bombo.
+  if (viewKey === "menu") { Music.calmUntilVoiceEnds(); Voice.say("menu"); }
 }
 document.addEventListener("pointerdown", unlockAudio);
 
@@ -97,7 +99,7 @@ function showMenu() {
       <p class="hint">Pon esta pantalla en la tele. Los demás juegan con el móvil.</p>
       <p class="hint small">flechas para moverte · Enter para elegir</p>
     </section>`;
-  $("#play").onclick = () => { unlockAudio(); Voice.say("menu"); createRoom(); };
+  $("#play").onclick = () => { unlockAudio(); createRoom(); };
   $("#cfg").onclick = () => { unlockAudio(); Voice.say("ajustes"); showSettings(); };
   $("#play").focus();
 }
@@ -234,17 +236,19 @@ function setPhase(phase, extra = {}, seconds = null) {
 function onEnterPhase() {
   armFromDeadline();
   switch (state.phase) {
-    case "lobby": lobbyQuietSince = Date.now(); lobbyNags = 0; wasReady = false; break;
+    case "lobby": Music.partySoon(); lobbyQuietSince = Date.now(); lobbyNags = 0; wasReady = false; break;
     case "drawing": {
+      Music.drive();
       const r = state.round, total = state.settings?.rounds || 1;
       Voice.say(r === 1 ? "empieza" : r === total ? "ultima" : "dibujo", { interrupt: true });
       break;
     }
-    case "lying": Voice.say("mentir", { interrupt: true }); break;
-    case "voting": Voice.say("votar", { interrupt: true }); break;
-    case "reveal": runReveal(); break;
-    case "scores": Voice.say("marcador", { interrupt: true }); break;
-    case "end": Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true }); break;
+    case "lying": Music.drive(); Voice.say("mentir", { interrupt: true }); break;
+    case "voting": Music.calm(); Voice.say("votar", { interrupt: true }); break;
+    case "reveal": Music.calm(); runReveal(); break;
+    // Marcador y final: se baja la música para leerlo y el bombo vuelve al acabar.
+    case "scores": Music.calmUntilVoiceEnds(); Voice.say("marcador", { interrupt: true }); break;
+    case "end": Music.calmUntilVoiceEnds(); Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true }); break;
   }
 }
 
@@ -661,7 +665,7 @@ function renderEnd() {
     </section>`;
   $("#again").onclick = playAgain;
   setTimeout(() => $("#again")?.focus(), 50);
-  $("#menu").onclick = () => { Voice.say("adios", { interrupt: true }); showMenu(); };
+  $("#menu").onclick = () => { Music.calmUntilVoiceEnds(); Voice.say("adios", { interrupt: true }); showMenu(); };
 }
 
 // Cuenta atrás en pantalla.
