@@ -1247,7 +1247,8 @@ function runGala(awards) {
       <p class="gala-sub">${awards.length ? `${awards.length} premios que nadie ha pedido` : "Este año no hay premios: el jurado está de huelga"}</p>
     </div>`;
   Voice.say("gala", { interrupt: true });
-  Sfx.play("aplausos");
+  Sfx.play("fanfarria");
+  later(400, () => Sfx.play("aplausos", { vol: 0.8 }));
   let t = GALA.intro;
   awards.forEach((a, i) => {
     later(t, () => showAward(a, i, awards.length));
@@ -1271,13 +1272,19 @@ function showAward(a, i, n) {
         <p class="award-stat">${esc(a.stat || "")}</p>
       </div>
     </article>`;
+  Sfx.play("entrega");
+  later(250, () => Sfx.play("pop"));
 }
 
 function openAward(a) {
   const el = $(".award");
   if (!el) return;
   el.classList.add("abierto");
-  Sfx.play("aplausos");
+  Sfx.play("revelar");
+  later(350, () => Sfx.play("pop"));
+  later(500, () => Sfx.play("acierto"));
+  later(700, () => Sfx.play("aplausos", { vol: 0.8 }));
+  later(900, () => Sfx.play("puntos"));
   Voice.say(a.voice, { interrupt: true });
 }
 
@@ -1300,8 +1307,10 @@ function runPodium() {
     if (first) later(times[i] - CRASH, () => Sfx.play("redoble"));
     later(times[i], () => {
       pods.filter((p) => +p.dataset.pos === pos).forEach((p) => { p.classList.remove("oculto"); p.classList.add("sube"); });
-      if (!first) return Sfx.play("aplausos");
-      Sfx.play("ovacion");
+      Sfx.play("revelar");
+      if (!first) { later(250, () => Sfx.play("pop")); return later(400, () => Sfx.play("aplausos", { vol: 0.8 })); }
+      Sfx.play("fanfarria");
+      later(300, () => Sfx.play("ovacion"));
       $("#win-title").classList.remove("oculto");
       Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true });
     });

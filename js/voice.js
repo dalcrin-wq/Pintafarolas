@@ -87,13 +87,15 @@ export const Voice = {
     enabled = v;
     if (!v) this.stop();
   },
-  /** Dice una frase del momento indicado. `interrupt` corta lo que esté sonando. */
+  /** Dice una frase del momento indicado.
+   *  `interrupt`: es lo más urgente; se salta lo que estuviera en cola, pero NUNCA corta a Lola
+   *  a media frase: espera a que acabe la que está diciendo. (Para cortar de verdad, stop().) */
   say(moment, { interrupt = false, ifIdle = false } = {}) {
     if (!enabled) return;
     if (ifIdle && (current || queue.length)) return; // p. ej. si entran tres a la vez, un saludo basta
     const code = pickCode(moment);
     if (!code) return;
-    if (interrupt) this.stop();
+    if (interrupt) queue.length = 0;
     if (queue.length >= 2) queue.shift(); // si se acumula, mejor saltarse una que llegar tarde
     queue.push(code);
     playNext();
