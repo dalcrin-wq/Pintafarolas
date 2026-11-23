@@ -8,13 +8,15 @@ import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayer
 export const TITLE = "Garabatrola";
 const DEFAULTS = { drawTime: 90, lieTime: 45, voteTime: 30, rounds: 2, music: true, voice: true };
 const MIN_PLAYERS = 2;
-const REVEAL_STEP = 5000;
+const REVEAL_STEP = 6000;
+const REVEAL_INTRO = 3000;
 
 const app = $("#app");
 let settings = loadSettings();
 let me = null, code = null, roomRef = null, state = null, unsub = null;
 let viewKey = "", timer = null, advancedFor = -1;
-let revealTimers = [], usedPrompts = new Set(), knownPlayers = new Set(), primed = false;
+let revealTimers = [], usedPrompts = new Set(), knownPlayers = new Map(), primed = false;
+let cues = { pid: -1, half: false, last10: false }, lobbyQuietSince = Date.now(), lobbyNags = 0, wasReady = false;
 
 function loadSettings() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("gt_settings") || "{}") }; }
@@ -55,8 +57,8 @@ function showMenu() {
       </div>
       <p class="hint">Pon esta pantalla en la tele. Los demás juegan con el móvil.</p>
     </section>`;
-  $("#play").onclick = () => { unlockAudio(); Voice.say("welcome"); createRoom(); };
-  $("#cfg").onclick = () => { unlockAudio(); showSettings(); };
+  $("#play").onclick = () => { unlockAudio(); Voice.say("menu"); createRoom(); };
+  $("#cfg").onclick = () => { unlockAudio(); Voice.say("ajustes"); showSettings(); };
 }
 
 function showSettings() {
@@ -73,6 +75,7 @@ function showSettings() {
       <label class="check"><input type="checkbox" id="s-music" ${settings.music ? "checked" : ""}> Música</label>
       <label class="check"><input type="checkbox" id="s-voice" ${settings.voice ? "checked" : ""}> Voz de la presentadora</label>
       <button class="btn" id="back">Guardar y volver</button>
+      <p class="credits">Voz de Lola generada con ElevenLabs.</p>
     </section>`;
   $("#back").onclick = () => {
     settings.drawTime = +$("#s-draw").value;
@@ -109,9 +112,10 @@ async function createRoom() {
     });
     sessionStorage.setItem("gt_room", code);
     listen();
-    Voice.say("lobby");
+    Voice.say("sala");
   } catch (e) {
     console.error(e);
+    Voice.say("error");
     app.innerHTML = `<section class="menu"><p class="error">No he podido crear la sala: ${esc(e.message)}</p>
       <button class="btn" id="back">Volver</button></section>`;
     $("#back").onclick = showMenu;
@@ -132,7 +136,7 @@ function leaveRoom() {
   clearTimeout(timer); clearReveal();
   if (roomRef) remove(roomRef).catch(() => {});
   state = null; code = null; roomRef = null;
-  knownPlayers = new Set(); primed = false; advancedFor = -1;
+  knownPlayers = new Map(); primed = false; advancedFor = -1;
   sessionStorage.removeItem("gt_room");
 }
 
@@ -151,9 +155,15 @@ function onState() {
 
 function announceJoins() {
   for (const p of sortedPlayers(state)) {
-    if (knownPlayers.has(p.uid)) continue;
-    knownPlayers.add(p.uid);
-    if (primed && state.phase === "lobby") Voice.say("join", { name: p.name });
+    const online = p.connected !== false;
+    if (!knownPlayers.has(p.uid)) {
+      knownPlayers.set(p.uid, online);
+      if (primed && state.phase === "lobby") Voice.say("entra");
+      continue;
+    }
+    const was = knownPlayers.get(p.uid);
+    knownPlayers.set(p.uid, online);
+    if (primed && was !== online && state.phase !== "lobby") Voice.say(online ? "vuelve" : "desconecta");
   }
   primed = true;
 }
@@ -172,12 +182,17 @@ function setPhase(phase, extra = {}, seconds = null) {
 function onEnterPhase() {
   armFromDeadline();
   switch (state.phase) {
-    case "drawing": Voice.say(state.round === 1 ? "start" : "drawing"); break;
-    case "lying": Voice.say("lying", { name: nameOf(state.current?.artist) }); break;
-    case "voting": Voice.say("voting"); break;
+    case "lobby": lobbyQuietSince = Date.now(); lobbyNags = 0; wasReady = false; break;
+    case "drawing": {
+      const r = state.round, total = state.settings?.rounds || 1;
+      Voice.say(r === 1 ? "empieza" : r === total ? "ultima" : "dibujo", { interrupt: true });
+      break;
+    }
+    case "lying": Voice.say("mentir", { interrupt: true }); break;
+    case "voting": Voice.say("votar", { interrupt: true }); break;
     case "reveal": runReveal(); break;
-    case "scores": Voice.say("scores"); break;
-    case "end": { const w = winners(); if (w.length) Voice.say(w.length > 1 ? "tie" : "end", { name: w.map((p) => p.name).join(" y ") }); break; }
+    case "scores": Voice.say("marcador", { interrupt: true }); break;
+    case "end": Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true }); break;
   }
 }
 
@@ -199,7 +214,10 @@ function checkProgress() {
     if (canStart()) startGame();
     return;
   }
-  if (s.phase === "drawing" && act.length && act.every((u) => s.drawings?.[u])) advance();
+  if (s.phase === "drawing" && act.length && act.every((u) => s.drawings?.[u])) {
+    if (advancedFor !== s.phaseId && s.deadline && s.deadline - serverNow() > 10000) Voice.say("rapidos");
+    advance();
+  }
   const judges = act.filter((u) => u !== s.current?.artist);
   if (s.phase === "lying" && judges.every((u) => s.lies?.[u])) advance();
   if (s.phase === "voting" && judges.every((u) => s.votes?.[u])) advance();
@@ -315,10 +333,11 @@ function startReveal() {
   const seq = [...fooled, byId.t];
   const upd = {};
   for (const [u, n] of Object.entries(gains)) upd[`players/${u}/score`] = (s.players?.[u]?.score || 0) + n;
-  return setPhase("reveal", { ...upd, results: { seq, gains } }, (seq.length * REVEAL_STEP) / 1000 + 3);
+  return setPhase("reveal", { ...upd, results: { seq, gains } }, (REVEAL_INTRO + seq.length * REVEAL_STEP) / 1000 + 2);
 }
 
 function playAgain() {
+  Voice.say("otra", { interrupt: true });
   const upd = {
     phase: "lobby", phaseId: state.phaseId + 1, deadline: null, round: null, prompts: null,
     drawings: null, lies: null, votes: null, options: null, results: null,
@@ -488,13 +507,14 @@ function clearReveal() {
 
 function runReveal() {
   clearReveal();
+  Voice.say("suspense", { interrupt: true });
   const pid = state.phaseId;
   (state.results?.seq || []).forEach((o, i) => {
     revealTimers.push(setTimeout(() => {
       if (state?.phaseId !== pid) return;
       renderRevealCard(o);
       speakReveal(o);
-    }, i * REVEAL_STEP + 400));
+    }, REVEAL_INTRO + i * REVEAL_STEP));
   });
 }
 
@@ -524,10 +544,11 @@ function renderRevealCard(o) {
 }
 
 function speakReveal(o) {
-  Voice.say(o.text);
-  if (o.kind === "truth") Voice.say(o.voters?.length ? "truth" : "noOneTruth");
-  else if (o.kind === "lie") Voice.say("fooled", { name: (o.authors || []).map(nameOf).join(" y ") });
-  else Voice.say("house");
+  const n = (o.voters || []).length;
+  if (o.kind === "lie") return Voice.say(n >= 2 ? "coloMuchos" : "colo");
+  if (o.kind === "house") return Voice.say("casa");
+  const judges = active().filter((p) => p.uid !== state.current?.artist).length;
+  Voice.say(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad");
 }
 
 function boardHTML(list, offset = 0) {
@@ -572,17 +593,50 @@ function renderEnd() {
       </div>
     </section>`;
   $("#again").onclick = playAgain;
-  $("#menu").onclick = showMenu;
+  $("#menu").onclick = () => { Voice.say("adios", { interrupt: true }); showMenu(); };
 }
 
 // Cuenta atrás en pantalla.
 setInterval(() => {
-  const t = document.querySelector("[data-timer]");
-  if (!t || !state?.deadline) return;
+  if (!state) return;
+  if (state.phase === "lobby") return lobbyCues();
+  if (!state.deadline) return;
   const secs = Math.max(0, Math.ceil((state.deadline - serverNow()) / 1000));
-  t.textContent = secs;
-  t.classList.toggle("hurry", secs <= 10);
+  const t = document.querySelector("[data-timer]");
+  if (t) {
+    t.textContent = secs;
+    t.classList.toggle("hurry", secs <= 10);
+  }
+  timeCues(secs);
 }, 250);
+
+// Avisos de Lola según el reloj: mitad del tiempo y últimos segundos.
+function timeCues(secs) {
+  const s = state;
+  if (cues.pid !== s.phaseId) cues = { pid: s.phaseId, half: false, last10: false };
+  const total = { drawing: s.settings.drawTime, lying: s.settings.lieTime, voting: s.settings.voteTime }[s.phase];
+  if (!total) return;
+  if (s.phase === "drawing" && !cues.half && total >= 60 && secs <= total / 2 && secs > 15) {
+    cues.half = true;
+    Voice.say("mitad");
+  }
+  if (!cues.last10 && secs <= 10 && secs > 3) {
+    cues.last10 = true;
+    Voice.say({ drawing: "ultimosDibujo", lying: "prisaMentir", voting: "prisaVotar" }[s.phase]);
+  }
+}
+
+// En la sala: avisa cuando todos están listos y da la lata si nadie empieza.
+function lobbyCues() {
+  const ready = canStart();
+  if (ready && !wasReady) { Voice.say("listos"); lobbyQuietSince = Date.now(); }
+  wasReady = ready;
+  if (!ready && sortedPlayers(state).length && lobbyNags < 3 && Date.now() - lobbyQuietSince > 45000) {
+    lobbyNags++;
+    lobbyQuietSince = Date.now();
+    Voice.say("espera");
+  }
+}
 
 async function boot() {
   const saved = sessionStorage.getItem("gt_room");

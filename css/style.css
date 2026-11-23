@@ -188,3 +188,5 @@ body.player { padding: .8rem; }
 .vote:disabled { opacity: .5; }
 .vote.chosen { background: var(--yellow); opacity: 1; }
 .big-emoji { font-size: 4rem; margin: 0; }
+
+.credits { margin-top: 1rem; font-size: .9rem; color: var(--muted); text-align: center; }

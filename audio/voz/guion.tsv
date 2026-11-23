@@ -1,0 +1,89 @@
+menu-01	[warmly] Bienvenidos a Garabatrola. [playfully] Aquí dibujar mal no es un defecto: es una estrategia.
+menu-02	[warmly] Hola, artistas. [chuckles] Bueno... llamémoslo así por educación.
+menu-03	[softly] Buenas noches. Esta noche alguien va a mentir mucho... [playfully] y va a ganar.
+ajustes-01	[playfully] Ajustes. Toca lo que quieras, que yo voy a hacer lo mismo de siempre.
+ajustes-02	[softly] Ah, de los que leen las instrucciones. [warmly] Me gustáis.
+sala-01	[warmly] Sacad el móvil y apuntad al código. No hace falta descargar nada... [chuckles] por una vez en la vida.
+sala-02	[playfully] Escanead el código. El que tenga el móvil sin batería, que vaya pensando una excusa.
+sala-03	[softly] Mientras llega todo el mundo, dibujaos la cara. Nadie espera parecido. [playfully] Y si sale parecido... preocúpate.
+entra-01	[warmly] ¡Uno más! Esto se anima.
+entra-02	[warmly] Ha llegado alguien. Bienvenido, seas quien seas.
+entra-03	[playfully] Otro artista incomprendido. Perfecto.
+entra-04	[warmly] Bienvenido. Ponte cómodo, [chuckles] que lo de dibujar bien te lo vas a ahorrar.
+entra-05	[softly] Mirad quién ha venido. [chuckles] No, en serio... miradle la cara que se ha dibujado.
+entra-06	[playfully] Llega alguien nuevo. El nivel artístico acaba de bajar. Ideal.
+espera-01	[softly] Estoy aquí, eh. Esperando. Sin prisa. [sighs] Bueno... un poco de prisa.
+espera-02	[playfully] Cuando queráis empezamos. Yo tengo toda la noche. Literalmente: soy un programa.
+espera-03	[warmly] Con dos se puede jugar, pero con tres hay más gente a la que engañar.
+listos-01	[playfully] Todo el mundo listo. Cuando el anfitrión quiera... que es ya, ¿no?
+listos-02	[softly] Listos todos. Respirad hondo. [chuckles] Vais a necesitarlo.
+empieza-01	[warmly] ¡Empezamos! Cada uno tiene una frase secreta en el móvil. [playfully] Secreta significa que no se la enseñáis al de al lado.
+empieza-02	[playfully] Que empiece el desastre. Tenéis una frase en el móvil: dibujadla como podáis.
+empieza-03	[softly] Reglas: dibujas tu frase, los demás se inventan qué es... [playfully] y la verdad casi nunca gana.
+dibujo-01	[warmly] Nueva ronda, nueva frase. A dibujar.
+dibujo-02	[playfully] Lápices fuera. Bueno... dedos fuera.
+dibujo-03	[softly] A dibujar. Picasso también empezó mal. [chuckles] Y luego siguió mal, pero con estilo.
+mitad-01	[softly] Vais por la mitad. Algunos ya han terminado. [playfully] Otros aún están con la primera raya.
+mitad-02	[playfully] Mitad de tiempo. Si todavía no sabes qué estás dibujando, tranquilo: los demás tampoco lo sabrán.
+mitad-03	[softly] Queda la mitad. Buen momento para dejar de borrar.
+ultimos-dib-01	[playfully] ¡Diez segundos! Lo que haya en el lienzo, eso es arte.
+ultimos-dib-02	[playfully] ¡Se acaba el tiempo! Un par de rayas más y lo llamamos expresionismo.
+ultimos-dib-03	[teasing] Diez, nueve... es broma, no voy a contar. Pero daos prisa.
+ultimos-dib-04	[playfully] ¡Últimos segundos! Firmadlo, que eso le da valor.
+rapidos-01	[softly] ¿Ya? Qué rapidez. [chuckles] Eso, o qué poco esfuerzo.
+rapidos-02	[warmly] Todos han terminado. Vamos a ver estas obras maestras. [playfully] Bueno... estas obras.
+mentir-01	[playfully] ¿Qué demonios es esto? Escribid un título falso que suene a verdad.
+mentir-02	[softly] El artista ya sabe lo que es. Vosotros no. Inventad algo creíble.
+mentir-03	[softly] Mirad bien este dibujo... [playfully] y mentid. Con cariño, pero mentid.
+mentir-04	[warmly] Si adivináis lo que es, no lo escribáis. Aquí se viene a engañar, no a acertar.
+mentir-05	[whispers] Al artista: ni una pista. Cara de póker.
+prisa-mentir-01	[softly] Quedan pocos segundos. Una mentira mala es mejor que ninguna. [chuckles] Bueno... casi.
+prisa-mentir-02	[playfully] ¡Venga, que se acaba! Escribid lo que sea. «Un pato» siempre funciona.
+votar-01	[warmly] Ahora votad cuál es la verdad. Solo una es real; las demás son trolas.
+votar-02	[playfully] Elegid bien. Aquí miente hasta el apuntador.
+votar-03	[teasing] Votad. Y no busquéis vuestra propia mentira, que no está. Os conozco.
+votar-04	[softly] ¿Cuál es la de verdad? Fiaos de vuestro instinto. [playfully] O no: vuestro instinto os ha traído hasta aquí.
+prisa-votar-01	[playfully] ¡Últimos segundos para votar! Si dudas, elige la más rara.
+prisa-votar-02	[softly] Votad ya, que el dibujo no va a mejorar por mirarlo más.
+suspense-01	[softly] Vamos a ver quién ha caído en qué.
+suspense-02	[whispers] Momento de la verdad... [playfully] y de las mentiras.
+suspense-03	[warmly] Que nadie se enfade. [chuckles] Bueno, enfadaos un poco, que da juego.
+colo-01	[playfully] ¡Mentira! Y alguien se la ha tragado entera.
+colo-02	[warmly] Esto era una trola. Muy bien jugada, por cierto.
+colo-03	[softly] Falso. [sighs] Pero sonaba tan bien...
+colo-04	[teasing] Mentira. Alguien en esta sala debería revisar su confianza en la gente.
+colo-muchos-01	[playfully] ¡Varios han picado! Esto ya no es un juego, es una estafa organizada.
+colo-muchos-02	[warmly] Media sala engañada con una sola frase. Esa mentira merece un premio. [playfully] Y lo tiene: puntos.
+colo-muchos-03	[softly] Tantos votos para una mentira... Sois un público maravilloso. [chuckles] Para un timador.
+casa-01	[playfully] Esa mentira era mía. Sí, yo también juego sucio.
+casa-02	[softly] Esa me la he inventado yo. No gano puntos, [chuckles] pero sí satisfacción.
+casa-03	[teasing] Caíste en mi trampa. Me encanta mi trabajo.
+verdad-01	[softly] Y ahora... la verdad.
+verdad-02	[warmly] Esta es la buena. La auténtica. La original.
+verdad-03	[warmly] La verdad. Quien la votó se lleva sus puntos... y mi respeto.
+verdad-04	[playfully] Por fin, la verdad. Que ha estado aquí todo el rato, sufriendo.
+nadie-01	[sighs] Nadie ha acertado. El artista debería plantearse... cosas.
+nadie-02	[softly] Cero aciertos. [chuckles] Este dibujo es tan malo... que ya es arte contemporáneo.
+nadie-03	[teasing] Nadie. Ni uno. Ni el artista sabría decir qué dibujó.
+todos-01	[playfully] ¡Todos han acertado! O el dibujo es buenísimo, o las mentiras eran malísimas.
+todos-02	[softly] Acierto general. Mentirosos, esta ronda os habéis lucido. [chuckles] Para mal.
+marcador-01	[warmly] Vamos a ver cómo va la cosa.
+marcador-02	[playfully] Clasificación. Los de abajo, tranquilos: aún queda partida para hundiros más.
+marcador-03	[softly] Marcador. Algunos dibujan fatal pero mienten de maravilla. Y se nota.
+marcador-04	[warmly] Así está la tabla. El primero, que no se relaje. [playfully] El último, que no pierda la esperanza... del todo.
+ultima-01	[softly] Última ronda. Aquí se decide quién es el mejor mentiroso de la sala.
+ultima-02	[playfully] Última oportunidad. Si vas perdiendo, miente más fuerte.
+ganador-01	[warmly] ¡Tenemos ganador! [playfully] Enhorabuena: oficialmente, la persona menos fiable de la sala.
+ganador-02	[warmly] Y el ganador es... el de lo alto del podio. [playfully] Dibuja fatal, pero miente de maravilla.
+ganador-03	[softly] Victoria. [chuckles] No sé si felicitarte o vigilarte.
+ganador-04	[playfully] ¡Ganador! Ya puedes poner «mentiroso profesional» en el currículum.
+empate-01	[warmly] ¡Empate! Mentís exactamente igual de bien. [chuckles] No sé si es un elogio.
+empate-02	[playfully] Empate en lo más alto. Resolvedlo a piedra, papel o tijera. Fuera de mi programa.
+otra-01	[playfully] ¿Otra? Eso es que os ha gustado. O que alguien quiere la revancha.
+otra-02	[softly] Volvemos a la sala. [chuckles] Los que perdieron, ahora con más rencor.
+adios-01	[warmly] Gracias por jugar. [playfully] Y recordad: fuera de aquí, mentir está feo.
+desconecta-01	[softly] Alguien se ha desconectado. Esperemos que sea la batería y no la vergüenza.
+desconecta-02	[sighs] Perdemos un jugador. Su dibujo nos acompañará siempre. [playfully] Por desgracia.
+vuelve-01	[warmly] ¡Ha vuelto! Hacemos como que no ha pasado nada.
+silencio-01	[whispers] Qué silencio... Se oye cómo pensáis las mentiras.
+error-01	[softly] Uy, algo ha fallado. No es culpa mía. [chuckles] Bueno... un poco sí.
