@@ -401,6 +401,7 @@ body.player { padding: .9rem; }
 .mis-premios { font-weight: 800; margin-top: .9rem; }
 
 /* ---------- La gala de premios ---------- */
+.gala[hidden], .final[hidden] { display: none; }
 .gala { min-height: calc(100vh - 4rem); display: grid; place-items: center; }
 .gala-intro { animation: pop .6s cubic-bezier(.2, 1.5, .5, 1) both; }
 .gala-title {

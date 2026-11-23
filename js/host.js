@@ -912,6 +912,8 @@ const GALA_ORDER = ["minimal", "serio", "color", "credulo", "nadie", "mentiroso"
 const CRASH = 2000;
 const GALA = { intro: 4200, open: 3300, award: 8800, pod: [2000, 4000, 7800], buttons: 9800 };
 
+const puestoFinal = (p, r) => 1 + r.filter((x) => (x.score || 0) > (p.score || 0)).length;
+
 function namesHTML(uids) {
   const ps = uids.map((u) => state.players?.[u]).filter(Boolean);
   return ps.map((p) => `<span class="aw-person">${avatarHTML(p)}<b>${esc(p.name)}</b></span>`).join("");
@@ -926,9 +928,12 @@ function renderEnd() {
       <div class="gala" id="gala"></div>
       <div class="final" id="final" hidden>
         <h2 class="winner-title" id="win-title">${winTitle()}</h2>
-        <div class="podium">${r.slice(0, 3).map((p, i) => `
-          <div class="pod p${i + 1}" data-pos="${i + 1}">${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
-            <span class="score">${p.score || 0}</span><div class="block">${i + 1}</div></div>`).join("")}
+        <div class="podium">${r.slice(0, 3).map((p) => {
+          const pos = puestoFinal(p, r); // empates: mismo puesto
+          return `
+          <div class="pod p${pos}" data-pos="${pos}">${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
+            <span class="score">${p.score || 0}</span><div class="block">${pos}</div></div>`;
+        }).join("")}
         </div>
         <div class="board compact">${boardHTML(r.slice(3), 3)}</div>
         ${awards.length ? `<ul class="palmares">${awards.map((a) => `
@@ -1006,14 +1011,15 @@ function runPodium() {
   $("#win-title").classList.add("oculto");
   fin.querySelectorAll("#end-buttons, .palmares, .board.compact").forEach((x) => x.classList.add("oculto"));
   Voice.say("podio", { interrupt: true });
-  const pods = [...fin.querySelectorAll(".pod")].sort((a, b) => b.dataset.pos - a.dataset.pos); // 3.º, 2.º, 1.º
-  const times = GALA.pod.slice(3 - pods.length);
-  pods.forEach((pod, i) => {
-    const first = pod.dataset.pos === "1";
+  // Se destapa por puestos (3.º, 2.º, 1.º); los empatados salen a la vez.
+  const pods = [...fin.querySelectorAll(".pod")];
+  const puestos = [...new Set(pods.map((p) => +p.dataset.pos))].sort((a, b) => b - a);
+  const times = GALA.pod.slice(3 - puestos.length);
+  puestos.forEach((pos, i) => {
+    const first = pos === 1;
     if (first) later(times[i] - CRASH, () => Sfx.play("redoble"));
     later(times[i], () => {
-      pod.classList.remove("oculto");
-      pod.classList.add("sube");
+      pods.filter((p) => +p.dataset.pos === pos).forEach((p) => { p.classList.remove("oculto"); p.classList.add("sube"); });
       if (!first) return Sfx.play("aplausos");
       Sfx.play("ovacion");
       $("#win-title").classList.remove("oculto");
