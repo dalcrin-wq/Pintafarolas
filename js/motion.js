@@ -140,6 +140,32 @@ function wiggleSoon() {
   }, 4000 + Math.random() * 5000);
 }
 
+// En el logo, alguna letra se hincha y se deshincha justo en el tiempo:
+// con el bombo, en cada negra; sin él, una de cada dos.
+function pumpLoop() {
+  const g = (clock && clock()) || defaultGroove();
+  const beatMs = g.beat * 1000;
+  const toBeat = ((1 - ((g.phase * 2) % 1)) % 1) * beatMs;
+  setTimeout(() => {
+    const ls = [...document.querySelectorAll(".logo .l, .winner-title .l")];
+    const busy = g.intense ? 1 : Math.random() < 0.5;
+    if (ls.length && busy) {
+      const n = g.intense && Math.random() < 0.35 ? 2 : 1;
+      for (let k = 0; k < n; k++) {
+        const l = ls[Math.floor(Math.random() * ls.length)];
+        const big = 1.22 + Math.random() * (g.intense ? 0.25 : 0.12);
+        l.animate([
+          { transform: "scale(1)" },
+          { transform: `scale(${big})`, offset: 0.12 },
+          { transform: "scale(.9)", offset: 0.55 },
+          { transform: "scale(1)" },
+        ], { duration: beatMs * 1.6, easing: "ease-out", composite: "add" });
+      }
+    }
+    pumpLoop();
+  }, toBeat < 40 ? toBeat + beatMs : toBeat);
+}
+
 export function startMotion(grooveClock) {
   if (REDUCE) return;
   clock = grooveClock || null;
@@ -151,4 +177,5 @@ export function startMotion(grooveClock) {
   scan();
   setInterval(sync, 1000);
   wiggleSoon();
+  pumpLoop();
 }
