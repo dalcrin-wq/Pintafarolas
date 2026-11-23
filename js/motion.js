@@ -2,13 +2,14 @@
 // desperezan de vez en cuando. Si hay música (la tele), se sincroniza con ella;
 // si no (el móvil), sigue un pulso suave al mismo tempo.
 const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const DANCERS = ".logo, .stage-head h2, .winner-title, .lobby-side h2, .panel h2, .card h2";
+const DANCERS = ".logo, .tagline, .stage-head h2, .winner-title, .lobby-side h2, .panel h2, .card h2";
+const MENU_BTNS = ".menu .btn"; // en el menú, los botones también bailan, todo el rato
 const BPM = 115.04;
 const WAVE = 0.07; // desfase entre letras, en fracción del ciclo: hace la ola
 
 let clock = null;
-let intense = false;
-const letters = []; // { el, anim, i }
+let mood = ""; // «intense|menu»: cambia la amplitud del baile
+const letters = []; // { el, anim, i, kind: "l" | "btn" }
 
 function defaultGroove() {
   const beat = 60 / BPM;
@@ -17,8 +18,20 @@ function defaultGroove() {
 }
 
 // Un ciclo = 2 negras: rebote en cada negra, balanceo a un lado y al otro.
-function frames(strong) {
-  const y = strong ? 0.09 : 0.035, r = strong ? 4 : 1.6, s = strong ? 1.06 : 1.01;
+// En el menú, todo baila bastante más: es el escaparate.
+function frames(strong, menu, kind = "l") {
+  if (kind === "btn") {
+    const y = strong ? 7 : 4, r = strong ? 2.5 : 1.5;
+    return [
+      { transform: "translateY(0) rotate(0deg) scale(1)", easing: "ease-out" },
+      { transform: `translateY(-${y}px) rotate(-${r}deg) scale(1.04)`, offset: 0.18, easing: "ease-in" },
+      { transform: "translateY(0) rotate(0deg) scale(1)", offset: 0.5, easing: "ease-out" },
+      { transform: `translateY(-${y * 0.6}px) rotate(${r}deg) scale(1.02)`, offset: 0.68, easing: "ease-in" },
+      { transform: "translateY(0) rotate(0deg) scale(1)" },
+    ];
+  }
+  const k = menu ? 1.9 : 1;
+  const y = (strong ? 0.09 : 0.04) * k, r = (strong ? 4 : 1.8) * k, s = 1 + (strong ? 0.06 : 0.015) * k;
   return [
     { transform: "translateY(0) rotate(0deg) scale(1)", easing: "ease-out" },
     { transform: `translateY(-${y}em) rotate(-${r}deg) scale(${s})`, offset: 0.18, easing: "ease-in" },
@@ -51,8 +64,9 @@ function split(el) {
         l.textContent = ch;
         w.append(l);
         const idx = i++;
-        const anim = l.animate(frames(intense), { duration: 2000 * g.beat, iterations: Infinity });
-        letters.push({ el: l, anim, i: idx });
+        const [st, mn] = mood.split("|");
+        const anim = l.animate(frames(st === "1", mn === "1"), { duration: 2000 * g.beat, iterations: Infinity });
+        letters.push({ el: l, anim, i: idx, kind: "l" });
       }
       frag.append(w);
     });
@@ -79,12 +93,24 @@ function paintGradient(el) {
   }
 }
 
+function danceButtons() {
+  document.querySelectorAll(MENU_BTNS).forEach((b, n) => {
+    if (b.dataset.dance) return;
+    b.dataset.dance = "1";
+    const [st, mn] = mood.split("|");
+    const anim = b.animate(frames(st === "1", mn === "1", "btn"), { duration: 1043, iterations: Infinity });
+    letters.push({ el: b, anim, i: 3 + n * 2, kind: "btn" });
+  });
+}
+
 function sync() {
   const g = (clock && clock()) || defaultGroove();
   const dur = 2000 * g.beat;
-  if (g.intense !== intense) {
-    intense = g.intense;
-    for (const x of letters) x.anim.effect.setKeyframes(frames(intense));
+  const menu = document.body.dataset.scene === "menu";
+  const m = `${g.intense ? 1 : 0}|${menu ? 1 : 0}`;
+  if (m !== mood) {
+    mood = m;
+    for (const x of letters) x.anim.effect.setKeyframes(frames(g.intense, menu, x.kind));
   }
   for (let k = letters.length - 1; k >= 0; k--) {
     const x = letters[k];
@@ -97,7 +123,7 @@ function sync() {
 // De vez en cuando, un botón se despereza (justo en un tiempo del compás).
 function wiggleSoon() {
   setTimeout(() => {
-    const btns = [...document.querySelectorAll("#app .btn:not(:disabled)")].filter((b) => b.offsetParent);
+    const btns = [...document.querySelectorAll("#app .btn:not(:disabled)")].filter((b) => b.offsetParent && !b.dataset.dance);
     const b = btns[Math.floor(Math.random() * btns.length)];
     const g = (clock && clock()) || defaultGroove();
     const toBeat = ((1 - ((g.phase * 2) % 1)) % 1) * g.beat * 1000;
@@ -118,7 +144,7 @@ export function startMotion(grooveClock) {
   if (REDUCE) return;
   clock = grooveClock || null;
   const app = document.getElementById("app");
-  const scan = () => { app.querySelectorAll(DANCERS).forEach(split); sync(); };
+  const scan = () => { app.querySelectorAll(DANCERS).forEach(split); danceButtons(); sync(); };
   new MutationObserver(scan).observe(app, { childList: true, subtree: true });
   document.fonts?.ready.then(() => app.querySelectorAll(".dance-gradient").forEach(paintGradient));
   addEventListener("resize", () => app.querySelectorAll(".dance-gradient").forEach(paintGradient));

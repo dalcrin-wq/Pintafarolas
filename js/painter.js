@@ -235,7 +235,8 @@ export function startPainter() {
   document.body.prepend(layer);
 
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const CYCLE = 6500; // cada 6,5 s, otro cuadro parecido con otros colores
+  const CYCLE = 7000; // cada 7 s, otro cuadro parecido con otros colores
+  const FADE = 3500;  // fundido largo y suave entre cuadros
   let current = null, painted = "", timer = null, variant = 0, lastSwap = 0;
 
   const show = (scene, v) => {
@@ -247,15 +248,19 @@ export function startPainter() {
     // Zoom lentísimo hacia un punto cercano a la luz (cada cuadro, el suyo).
     const sc = SCENES[scene] || SCENES.menu;
     c.style.transformOrigin = `${Math.round((sc.light[0] + (Math.random() - 0.5) * 0.3) * 100)}% ${Math.round((sc.light[1] + (Math.random() - 0.5) * 0.3) * 100)}%`;
-    if (!current) c.style.transition = "none"; // el primer cuadro sale ya pintado
     layer.appendChild(c);
     const old = current;
     current = c;
     lastSwap = performance.now();
-    requestAnimationFrame(() => {
-      c.classList.add("on");
-      if (old) setTimeout(() => old.remove(), reduce ? 0 : 2600);
-    });
+    // El fundido va con la Web Animations API: con una transición CSS, si el navegador
+    // no llega a pintar el estado inicial, el cambio sale de golpe.
+    if (!old || reduce) {
+      c.style.opacity = 1;
+      if (old) old.remove();
+      return;
+    }
+    const fade = c.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE, easing: "ease-in-out", fill: "forwards" });
+    fade.finished.then(() => { if (old.isConnected && current !== old) old.remove(); }).catch(() => {});
   };
 
   const repaint = () => {
