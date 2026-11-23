@@ -1,13 +1,20 @@
 // Pantalla grande (tele/ordenador). Es el árbitro: decide cuándo cambia cada fase.
 import { login, db, ref, set, update, get, onValue, remove, serverTimestamp, serverNow } from "./firebase.js";
-import { PROMPTS, HOUSE_LIES } from "./prompts.js";
+import { PROMPTS, SPICY_PROMPTS, HOUSE_LIES } from "./prompts.js";
 import { Voice } from "./voice.js";
 import { Music } from "./music.js";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
-const DEFAULTS = { drawTime: 90, lieTime: 45, voteTime: 30, rounds: 2, music: true, voice: true };
+const DEFAULTS = { pace: "normal", rounds: 2, spicy: false, canvas: "comodo", hideCode: false, music: true, voice: true };
+// Ritmo: segundos para dibujar, mentir y votar.
+const PACES = {
+  normal: { draw: 75, lie: 40, vote: 25 },
+  relajado: { draw: 100, lie: 55, vote: 35 },
+  tranquilo: { draw: 130, lie: 75, vote: 45 },
+};
 const MIN_PLAYERS = 2;
+const MAX_PLAYERS = 10;
 const REVEAL_STEP = 6000;
 const REVEAL_INTRO = 3000;
 
@@ -19,8 +26,15 @@ let revealTimers = [], usedPrompts = new Set(), knownPlayers = new Map(), primed
 let cues = { pid: -1, half: false, last10: false }, lobbyQuietSince = Date.now(), lobbyNags = 0, wasReady = false;
 
 function loadSettings() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("gt_settings") || "{}") }; }
-  catch { return { ...DEFAULTS }; }
+  let s;
+  try { s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem("gt_settings") || "{}") }; }
+  catch { s = { ...DEFAULTS }; }
+  if (!PACES[s.pace]) s.pace = "normal";
+  return s;
+}
+function roomSettings() {
+  const p = PACES[settings.pace];
+  return { drawTime: p.draw, lieTime: p.lie, voteTime: p.vote, rounds: settings.rounds, spicy: !!settings.spicy, canvas: settings.canvas };
 }
 function saveSettings() {
   try { localStorage.setItem("gt_settings", JSON.stringify(settings)); } catch { /* sin almacenamiento */ }
@@ -34,6 +48,31 @@ function unlockAudio() {
   if (settings.music) Music.start();
 }
 document.addEventListener("pointerdown", unlockAudio);
+
+// Mando de la tele / teclado: flechas para moverse entre botones, Enter para elegir.
+document.addEventListener("keydown", (e) => {
+  unlockAudio();
+  if (e.key === "Escape" && viewKey === "settings") { e.preventDefault(); showMenu(); return; }
+  if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+  const items = [...app.querySelectorAll("button, a[href]")].filter((b) => !b.disabled && b.offsetParent !== null);
+  if (!items.length) return;
+  e.preventDefault();
+  const i = items.indexOf(document.activeElement);
+  const step = e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 1;
+  items[i < 0 ? 0 : (i + step + items.length) % items.length].focus();
+});
+
+// Botones fijos: pantalla completa y aviso para activar el sonido.
+const fsBtn = $("#fullscreen");
+if (fsBtn) {
+  fsBtn.onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()).catch?.(() => {});
+  document.addEventListener("fullscreenchange", () => { fsBtn.textContent = document.fullscreenElement ? "Salir de pantalla completa" : "Pantalla completa"; });
+}
+const soundBtn = $("#sound-hint");
+if (soundBtn) {
+  soundBtn.onclick = () => { unlockAudio(); };
+  setInterval(() => { soundBtn.hidden = audioUnlocked; }, 500);
+}
 Voice.setEnabled(settings.voice);
 
 const nameOf = (uid) => state?.players?.[uid]?.name || "alguien";
@@ -56,39 +95,53 @@ function showMenu() {
         <button class="btn ghost" id="cfg">Ajustes</button>
       </div>
       <p class="hint">Pon esta pantalla en la tele. Los demás juegan con el móvil.</p>
+      <p class="hint small">flechas para moverte · Enter para elegir</p>
     </section>`;
   $("#play").onclick = () => { unlockAudio(); Voice.say("menu"); createRoom(); };
   $("#cfg").onclick = () => { unlockAudio(); Voice.say("ajustes"); showSettings(); };
+  $("#play").focus();
 }
+
+const SETTING_ROWS = [
+  { key: "pace", label: "Ritmo", help: "Cuánto dura cada reloj: dibujar, mentir y votar.",
+    options: [["normal", "Normal"], ["relajado", "Relajado"], ["tranquilo", "Tranquilo"]] },
+  { key: "rounds", label: "Rondas", help: "Cada ronda, todo el mundo dibuja una frase.",
+    options: [[1, "1"], [2, "2"], [3, "3"]] },
+  { key: "spicy", label: "Frases gamberras", help: "Para adultos dispuestos a dibujar cosas difíciles de justificar.",
+    options: [[false, "No"], [true, "Sí"]] },
+  { key: "canvas", label: "Lienzo", help: "Clásico = sin deshacer ni goma: el error se queda, y de ahí sale media comedia.",
+    options: [["comodo", "Cómodo"], ["clasico", "Clásico"]] },
+  { key: "hideCode", label: "Ocultar código de sala", help: "Tapa el código y el QR en la sala, por si retransmites la partida.",
+    options: [[false, "No"], [true, "Sí"]] },
+  { key: "music", label: "Música", help: "", options: [[true, "Sí"], [false, "No"]] },
+  { key: "voice", label: "Voz de Lola", help: "", options: [[true, "Sí"], [false, "No"]] },
+];
 
 function showSettings() {
   viewKey = "settings";
-  const opt = (vals, cur, fmt = (v) => `${v} s`) =>
-    vals.map((v) => `<option value="${v}" ${v == cur ? "selected" : ""}>${fmt(v)}</option>`).join("");
+  const row = (r) => `
+    <li class="setting">
+      <div class="setting-text"><span class="setting-label">${r.label}</span>${r.help ? `<span class="setting-help">${r.help}</span>` : ""}</div>
+      <div class="seg" role="group" aria-label="${r.label}">
+        ${r.options.map(([v, t]) => `<button class="seg-btn ${settings[r.key] === v ? "on" : ""}" data-key="${r.key}" data-val='${JSON.stringify(v)}'>${t}</button>`).join("")}
+      </div>
+    </li>`;
   app.innerHTML = `
     <section class="panel settings">
       <h2>Ajustes</h2>
-      <label>Tiempo para dibujar <select id="s-draw">${opt([60, 90, 120, 150], settings.drawTime)}</select></label>
-      <label>Tiempo para mentir <select id="s-lie">${opt([30, 45, 60, 90], settings.lieTime)}</select></label>
-      <label>Tiempo para votar <select id="s-vote">${opt([20, 30, 45], settings.voteTime)}</select></label>
-      <label>Rondas <select id="s-rounds">${opt([1, 2, 3], settings.rounds, (v) => v)}</select></label>
-      <label class="check"><input type="checkbox" id="s-music" ${settings.music ? "checked" : ""}> Música</label>
-      <label class="check"><input type="checkbox" id="s-voice" ${settings.voice ? "checked" : ""}> Voz de la presentadora</label>
-      <button class="btn" id="back">Guardar y volver</button>
-      <p class="credits">Voz de Lola generada con ElevenLabs.</p>
+      <ul class="settings-list">${SETTING_ROWS.map(row).join("")}</ul>
+      <button class="btn" id="back">Volver</button>
+      <p class="credits">Escape también vuelve · los ajustes valen para la próxima sala · voz de Lola generada con ElevenLabs</p>
     </section>`;
-  $("#back").onclick = () => {
-    settings.drawTime = +$("#s-draw").value;
-    settings.lieTime = +$("#s-lie").value;
-    settings.voteTime = +$("#s-vote").value;
-    settings.rounds = +$("#s-rounds").value;
-    settings.music = $("#s-music").checked;
-    settings.voice = $("#s-voice").checked;
+  app.querySelectorAll(".seg-btn").forEach((b) => b.onclick = () => {
+    settings[b.dataset.key] = JSON.parse(b.dataset.val);
     saveSettings();
-    Voice.setEnabled(settings.voice);
-    settings.music ? Music.start() : Music.stop();
-    showMenu();
-  };
+    app.querySelectorAll(`.seg-btn[data-key="${b.dataset.key}"]`).forEach((x) => x.classList.toggle("on", x === b));
+    if (b.dataset.key === "voice") Voice.setEnabled(settings.voice);
+    if (b.dataset.key === "music") settings.music ? Music.start() : Music.stop();
+  });
+  $("#back").onclick = showMenu;
+  app.querySelector(".seg-btn.on")?.focus();
 }
 
 /* ---------------- Sala ---------------- */
@@ -105,10 +158,9 @@ async function createRoom() {
     }
     if (!c) throw new Error("No encuentro un código libre");
     code = c;
-    const { drawTime, lieTime, voteTime, rounds } = settings;
     await set(ref(db, `rooms/${code}`), {
       host: me.uid, phase: "lobby", phaseId: 1, createdAt: serverTimestamp(),
-      settings: { drawTime, lieTime, voteTime, rounds },
+      settings: roomSettings(),
     });
     sessionStorage.setItem("gt_room", code);
     listen();
@@ -251,7 +303,8 @@ function startGame() {
 }
 
 function startRound(n, extra = {}) {
-  const pool = shuffle(PROMPTS.filter((p) => !usedPrompts.has(p)));
+  const all = state.settings?.spicy ? [...SPICY_PROMPTS, ...SPICY_PROMPTS, ...PROMPTS] : PROMPTS;
+  const pool = [...new Set(shuffle(all.filter((p) => !usedPrompts.has(p))))];
   const prompts = {};
   active().forEach((p, i) => {
     const t = pool[i % pool.length];
@@ -382,14 +435,21 @@ function renderLobby() {
   const url = joinURL();
   app.innerHTML = `
     <section class="lobby">
-      <div class="join-box">
+      <div class="join-box ${settings.hideCode ? "hidden-code" : ""}" id="join-box">
+        <p class="room-code">Tu sala es <span>${code}</span></p>
         <div class="qr" id="qr"></div>
-        <p class="join-text">Escanea el código o entra en<br><b>${esc(url.replace(/^https?:\/\//, ""))}</b></p>
-        <p class="room-code">Sala <span>${code}</span></p>
+        <p class="join-text">Apunta con la cámara o entra en<br><b>${esc(url.replace(/^https?:\/\//, ""))}</b></p>
+        ${settings.hideCode ? `<button class="btn ghost small" id="reveal-code">Mostrar código</button>` : ""}
       </div>
       <div class="lobby-side">
-        <h2>Jugadores</h2>
+        <h2>Jugadores <small id="count"></small></h2>
         <div class="players" id="players"></div>
+        <ol class="howto">
+          <li><b>1</b> Te toca una frase secreta y la dibujas en tu móvil.</li>
+          <li><b>2</b> Los demás ven tu dibujo e inventan un título falso.</li>
+          <li><b>3</b> Todos votan cuál era el título de verdad.</li>
+          <li><b>4</b> Puntos por acertar y por colar tu mentira. Dibujar mal nunca resta.</li>
+        </ol>
         <p class="lobby-status" id="lobby-status"></p>
         <div class="row">
           <button class="btn big" id="start">Empezar</button>
@@ -403,22 +463,29 @@ function renderLobby() {
   $("#qr").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
   $("#start").onclick = () => { if (canStart()) startGame(); };
   $("#exit").onclick = showMenu;
+  const rc = $("#reveal-code");
+  if (rc) rc.onclick = () => { $("#join-box").classList.toggle("hidden-code"); rc.textContent = $("#join-box").classList.contains("hidden-code") ? "Mostrar código" : "Ocultar código"; };
   renderLobbyPlayers();
+  ($("#start").disabled ? $("#exit") : $("#start")).focus();
 }
 
 function renderLobbyPlayers() {
   const el = $("#players");
   if (!el) return;
   const ps = sortedPlayers(state);
-  el.innerHTML = ps.length ? ps.map((p) => `
+  const slots = Math.max(0, 3 - ps.length);
+  el.innerHTML = ps.map((p) => `
       <div class="pcard ${p.connected === false ? "off" : ""} ${p.ready ? "ready" : ""}">
         ${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
         <span class="badge">${p.connected === false ? "Desconectado" : p.ready ? "¡Listo!" : "Dibujándose…"}</span>
-      </div>`).join("")
-    : `<p class="empty-msg">Aún no ha llegado nadie. Esto parece una fiesta de los martes.</p>`;
+      </div>`).join("") + ["○", "△", "□"].slice(3 - slots).map((s) => `
+      <div class="pcard slot"><div class="avatar empty">${s}</div><span class="pname">Hace falta</span></div>`).join("");
   const n = active().length;
   const ok = canStart();
+  $("#count").textContent = `${ps.length} de ${MAX_PLAYERS}`;
+  const wasDisabled = $("#start").disabled;
   $("#start").disabled = !ok;
+  if (wasDisabled && ok && document.activeElement === $("#exit")) $("#start").focus();
   $("#lobby-status").textContent = n < MIN_PLAYERS
     ? `Hacen falta al menos ${MIN_PLAYERS} jugadores (con 3 o más tiene mucha más gracia).`
     : ok ? "Todo el mundo está listo. ¡Dale!" : "Esperando a que todos pulsen «¡Estoy listo!» en el móvil.";

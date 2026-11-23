@@ -101,15 +101,21 @@ function header() {
   return `<div class="me">${avatarHTML(p, "tiny")}<b>${esc(p?.name)}</b><span class="score" data-score></span></div>`;
 }
 
+let faceMode = false;
+const classic = () => !faceMode && state?.settings?.canvas === "clasico";
+
 function tools(colors) {
+  // Lienzo clásico: sin goma, sin deshacer y sin borrar. Lo dibujado, dibujado está.
+  if (classic()) colors = colors.filter((c) => c !== "#ffffff");
   return `
     <div class="tools">
       ${colors.map((c, i) => `<button class="swatch ${i === 0 ? "on" : ""} ${c === "#ffffff" ? "eraser" : ""}"
           data-color="${c}" style="background:${c}" aria-label="${c === "#ffffff" ? "Goma" : "Color"}"></button>`).join("")}
       <button class="tool" data-size>Trazo fino</button>
-      <button class="tool" data-undo aria-label="Deshacer">↶</button>
-      <button class="tool" data-clear aria-label="Borrar todo">🗑</button>
-    </div>`;
+      ${classic() ? "" : `<button class="tool" data-undo aria-label="Deshacer">↶</button>
+      <button class="tool" data-clear aria-label="Borrar todo">🗑</button>`}
+    </div>
+    ${classic() ? `<p class="muted small">Lienzo clásico: no se puede deshacer. Valor.</p>` : ""}`;
 }
 
 function bindTools(p) {
@@ -123,8 +129,9 @@ function bindTools(p) {
     p.width = thick ? 16 : 6;
     size.textContent = thick ? "Trazo gordo" : "Trazo fino";
   };
-  $("[data-undo]").onclick = () => p.undo();
-  $("[data-clear]").onclick = () => p.clear();
+  const undo = $("[data-undo]"), clear = $("[data-clear]");
+  if (undo) undo.onclick = () => p.undo();
+  if (clear) clear.onclick = () => p.clear();
 }
 
 function accentFor(uid, round) {
@@ -192,6 +199,7 @@ function buildJoin() {
 }
 
 function buildLobby() {
+  faceMode = true; // la cara siempre con lienzo cómodo
   card(`
     <h2>Dibuja tu cara</h2>
     <p class="muted">Mientras llega todo el mundo. Nadie espera parecido.</p>
@@ -201,6 +209,7 @@ function buildLobby() {
     <button class="btn alt" id="start" hidden>Empezar partida</button>
     <p class="muted" id="lobby-msg"></p>`);
   pad = new DrawPad($("#pad"), { size: 240 });
+  faceMode = false;
   pad.setBase(safeImg(meP()?.avatar));
   bindTools(pad);
   pad.onChange = () => {
