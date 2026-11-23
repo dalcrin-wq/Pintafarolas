@@ -3,6 +3,7 @@ import { login, db, ref, set, update, get, onValue, remove, serverTimestamp, ser
 import { PROMPTS, SPICY_PROMPTS, HOUSE_LIES } from "./prompts.js";
 import { Voice } from "./voice.js";
 import { Music } from "./music.js";
+import { startPainter, setScene } from "./painter.js";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -88,6 +89,7 @@ const canStart = () => { const a = active(); return a.length >= MIN_PLAYERS && a
 function showMenu() {
   leaveRoom();
   viewKey = "menu";
+  setScene("menu");
   app.innerHTML = `
     <section class="menu">
       <h1 class="logo">${TITLE}</h1>
@@ -121,6 +123,7 @@ const SETTING_ROWS = [
 
 function showSettings() {
   viewKey = "settings";
+  setScene("settings");
   const row = (r) => `
     <li class="setting">
       <div class="setting-text"><span class="setting-label">${r.label}</span>${r.help ? `<span class="setting-help">${r.help}</span>` : ""}</div>
@@ -199,6 +202,7 @@ function onState() {
   const key = `${state.phase}|${state.phaseId}`;
   if (key !== viewKey) {
     viewKey = key;
+    setScene(state.phase);
     renderPhase();
     onEnterPhase();
   } else {
@@ -526,13 +530,28 @@ function renderProgress() {
     </div>`).join("");
 }
 
+// La cartela de museo: cada obra con su técnica (siempre la misma para el mismo dibujo).
+const TECHNIQUES = [
+  "Óleo sobre móvil", "Dedo sobre cristal", "Técnica mixta: prisa y fe", "Pulgar sobre pantalla",
+  "Garabato al temple", "Escuela de la servilleta", "Acuarela sin agua", "Realismo optimista",
+  "Expresionismo de sofá", "Arte conceptual (muy conceptual)",
+];
+function technique(uid = "", round = 1) {
+  let h = round * 31;
+  for (const ch of uid) h = (h * 33 + ch.charCodeAt(0)) >>> 0;
+  return TECHNIQUES[h % TECHNIQUES.length];
+}
+
 function artworkHTML() {
   const s = state;
   const a = s.players?.[s.current.artist];
   return `
     <figure class="artwork">
       <img src="${safeImg(s.drawings?.[s.current.artist])}" alt="">
-      <figcaption>${avatarHTML(a, "tiny")} Obra de ${esc(a?.name || "?")}</figcaption>
+      <figcaption class="cartela">
+        <span class="c-autor">${avatarHTML(a, "tiny")} ${esc(a?.name || "Anónimo")}</span>
+        <span class="c-tecnica">${technique(s.current.artist, s.round)}, ${new Date().getFullYear()}</span>
+      </figcaption>
     </figure>`;
 }
 
@@ -727,4 +746,5 @@ async function boot() {
   showMenu();
 }
 
+startPainter();
 boot();

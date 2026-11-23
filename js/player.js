@@ -1,6 +1,7 @@
 // El móvil de cada jugador: mando, lienzo y papeleta de voto.
 import { login, db, ref, set, update, onValue, serverTimestamp, onDisconnect, serverNow } from "./firebase.js";
 import { DrawPad } from "./pad.js";
+import { startPainter, setScene } from "./painter.js";
 import { $, $$, esc, normalize, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 const TITLE = "Garabatrola";
@@ -91,6 +92,7 @@ function render() {
     viewKey = key;
     pad = null;
     sending = false;
+    setScene(key.split("|")[0]);
     build(key.split("|")[0]);
   }
   refresh();
@@ -344,4 +346,5 @@ setInterval(() => {
   if (secs === 0 && state.phase === "drawing" && pad && !state.drawings?.[me.uid]) sendDrawing(true);
 }, 250);
 
+startPainter();
 boot();
