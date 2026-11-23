@@ -25,6 +25,8 @@ export const MOMENTS = {
   colo: N("colo", 4),
   coloMuchos: N("colo-muchos", 3),
   casa: N("casa", 3),
+  nadiePico: N("nadie-pico", 4), // mentiras que no votó nadie: a la papelera
+  lider: N("lider", 3),           // alguien se pone en cabeza
   verdad: N("verdad", 4),
   nadie: N("nadie", 3),
   todos: N("todos", 2),

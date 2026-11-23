@@ -326,3 +326,63 @@ body.player { padding: .9rem; }
 .l { display: inline-block; transform-origin: 50% 90%; }
 /* En los títulos con degradado, cada letra pinta su trozo del degradado. */
 .dance-gradient .l { -webkit-background-clip: text; background-clip: text; color: transparent; background-repeat: no-repeat; }
+
+/* ---------- El destape (por actos) ---------- */
+.reveal-opts li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .3rem .8rem; transition: opacity .5s, transform .5s, filter .5s; }
+.reveal-opts .opt-text { grid-column: 1; }
+.reveal-opts .gain-badge { grid-column: 2; grid-row: 1; justify-self: end; font-family: var(--display); font-size: 1.3rem; color: var(--lima-oscura); }
+.reveal-opts .gain-badge:empty, .reveal-opts .stamp:empty, .reveal-opts .opt-voters:empty { display: none; }
+.reveal-opts .opt-voters { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .4rem; }
+.reveal-opts .stamp {
+  position: absolute; right: -10px; top: -16px; transform: rotate(6deg);
+  font-family: var(--display); font-size: 1.05rem; padding: .1rem .7rem .2rem; border-radius: 6px;
+  color: var(--lienzo-claro); background: #b23a63; box-shadow: 3px 4px 0 -1px rgba(30, 34, 64, .5);
+  animation: sello .35s cubic-bezier(.2, 1.8, .5, 1) both;
+}
+@keyframes sello { from { transform: rotate(-12deg) scale(2.2); opacity: 0; } to { transform: rotate(6deg) scale(1); opacity: 1; } }
+.flyer {
+  display: inline-flex; align-items: center; gap: .35rem; padding: .1rem .7rem .1rem .15rem; border-radius: 999px;
+  background: rgba(255, 252, 235, .9); font-size: 1rem; box-shadow: 2px 3px 0 -1px rgba(34, 38, 72, .35);
+  animation: vuela .55s cubic-bezier(.2, 1.6, .5, 1) both;
+}
+@keyframes vuela { from { transform: translate(-120px, 60px) scale(.3) rotate(-20deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* 1) Nadie picó: tiembla, sello y se cae */
+.reveal-opts li.fuera { animation: tiembla .45s ease-in-out, cae .9s .9s ease-in forwards; }
+.reveal-opts li.fuera .stamp { background: var(--niebla); }
+@keyframes tiembla { 20%, 60% { transform: rotate(-2deg) translateX(-6px); } 40%, 80% { transform: rotate(2deg) translateX(6px); } }
+@keyframes cae { to { transform: translateY(26px) rotate(-4deg); opacity: .28; filter: saturate(0) blur(.5px); } }
+.reveal-opts li.fuera.still { animation: none; transform: translateY(26px) rotate(-4deg); opacity: .28; filter: saturate(0); }
+
+/* 2) Mentira que coló, 3) la verdad */
+.reveal-opts li.apagada { opacity: .45; filter: saturate(.4); }
+.reveal-opts li.fuera.apagada { opacity: .2; }
+.reveal-opts li.foco { transform: scale(1.06) rotate(-1deg); z-index: 2; }
+.reveal-opts li.mentira::before { background: linear-gradient(150deg, rgba(255, 214, 220, .9), rgba(217, 87, 127, .35) 70%, rgba(80, 70, 140, .35)), var(--paper-tex, none), var(--lienzo); }
+.reveal-opts li.verdad::before { background: linear-gradient(150deg, rgba(236, 244, 170, .95), rgba(182, 201, 58, .55) 65%, rgba(61, 128, 136, .45)), var(--paper-tex, none), var(--lienzo); }
+.reveal-opts li.verdad .stamp { background: var(--lima-oscura); }
+.reveal-opts .burst { display: none; }
+.reveal-opts li.verdad.foco:not(.still) .burst {
+  display: block; position: absolute; inset: -40px; z-index: -2; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, rgba(240, 214, 110, .75) 0 6deg, transparent 6deg 22deg);
+  -webkit-mask: radial-gradient(circle, transparent 38%, #000 40%, #000 60%, transparent 72%);
+  mask: radial-gradient(circle, transparent 38%, #000 40%, #000 60%, transparent 72%);
+  animation: estalla 1.4s ease-out forwards;
+}
+@keyframes estalla { from { transform: scale(.4) rotate(0); opacity: 1; } to { transform: scale(1.5) rotate(25deg); opacity: 0; } }
+.reveal-opts li.still, .reveal-opts li.still * { animation: none !important; }
+.reveal-caption { font-size: 1.6rem; font-weight: 900; min-height: 2rem; text-shadow: var(--halo); margin: .4rem 0 0; }
+
+/* 4–5) Puntos del dibujo y clasificación */
+.marcador .board { max-width: 880px; }
+.marcador .brow { grid-template-columns: 2.6rem 40px 1fr 7rem 3.2rem 6rem; font-size: 1.25rem; }
+.brow .gain { font-family: var(--display); font-size: 1.5rem; color: var(--lima-oscura); text-align: right; transition: transform .6s, opacity .6s; }
+.brow .gain.cero { color: var(--niebla); opacity: .6; }
+.brow .gain.sumando { transform: translateX(150px) scale(.6); opacity: 0; }
+.brow .move { font-weight: 900; font-size: 1rem; text-align: center; }
+.brow .move.sube { color: var(--lima-oscura); animation: pop .4s ease-out; }
+.brow .move.baja { color: #b23a63; animation: pop .4s ease-out; }
+.brow.lider .pos::after { content: "👑"; font-size: 1.1rem; margin-left: .1rem; vertical-align: super; }
+.brow.lider::before { background: var(--luz-cara), var(--paper-tex, none), linear-gradient(172deg, #f6e6a0, #ecc35c 70%, #de8f5f); }
+.brow.lider.nuevo { animation: nuevoLider 1.2s ease-out; }
+@keyframes nuevoLider { 0% { transform: scale(1); } 30% { transform: scale(1.08) rotate(-1deg); } 60% { transform: scale(.98) rotate(.5deg); } 100% { transform: none; } }

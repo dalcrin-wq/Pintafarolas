@@ -18,8 +18,8 @@ const PACES = {
 };
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 10;
-const REVEAL_STEP = 6000;
-const REVEAL_INTRO = 3000;
+// El destape, por actos (ms). Ver revealPlan().
+const RV = { intro: 2600, fuera: 4800, lie: 6200, truth: 6800, points: 4800, sum: 8000 };
 
 const app = $("#app");
 let settings = loadSettings();
@@ -347,7 +347,8 @@ function startJudging() {
 
 function nextDrawing(queue, judgeTotal = state.judgeTotal || queue.length) {
   if (!queue.length) {
-    return setPhase("scores", { current: null, queue: null, lies: null, votes: null, options: null, results: null }, 9);
+    if ((state.round || 1) < (state.settings?.rounds || 1)) return startRound(state.round + 1);
+    return setPhase("end", { current: null, queue: null, lies: null, votes: null, options: null, results: null });
   }
   const artist = queue[0];
   return setPhase("lying", {
@@ -402,13 +403,31 @@ function startReveal() {
       else if (o.kind === "lie") for (const a of o.authors || []) add(a, 500);
     }
   }
-  const fooled = Object.values(byId)
-    .filter((o) => o.kind !== "truth" && o.voters.length)
-    .sort((a, b) => a.voters.length - b.voters.length);
-  const seq = [...fooled, byId.t];
+  const prev = {};
+  for (const p of sortedPlayers(s)) prev[p.uid] = p.score || 0;
+  const opts = (s.options || []).map((o) => byId[o.id]);
+  const results = { opts, gains, prev, last: !(s.queue || []).length, round: s.round, rounds: s.settings?.rounds || 1 };
   const upd = {};
   for (const [u, n] of Object.entries(gains)) upd[`players/${u}/score`] = (s.players?.[u]?.score || 0) + n;
-  return setPhase("reveal", { ...upd, results: { seq, gains } }, (REVEAL_INTRO + seq.length * REVEAL_STEP) / 1000 + 2);
+  return setPhase("reveal", { ...upd, results }, revealPlan(results).total / 1000 + 0.5);
+}
+
+// Cronograma del destape: 1) fuera las mentiras que no votó nadie, 2) una a una las que
+// colaron, 3) la verdad, 4) puntos de este dibujo, 5) se suman a la clasificación.
+function revealPlan(r) {
+  // Firebase no guarda listas vacías: las recuperamos.
+  const opts = Object.values(r?.opts || {}).map((o) => ({ ...o, voters: Object.values(o.voters || {}), authors: Object.values(o.authors || {}) }));
+  const unpicked = opts.filter((o) => o.kind !== "truth" && !o.voters.length);
+  const fooled = opts.filter((o) => o.kind !== "truth" && o.voters.length).sort((a, b) => a.voters.length - b.voters.length);
+  const truth = opts.find((o) => o.kind === "truth");
+  const steps = [];
+  let t = RV.intro;
+  if (unpicked.length) { steps.push({ at: t, act: "fuera", list: unpicked }); t += RV.fuera; }
+  for (const o of fooled) { steps.push({ at: t, act: "lie", o }); t += RV.lie; }
+  steps.push({ at: t, act: "truth", o: truth }); t += RV.truth;
+  steps.push({ at: t, act: "points" }); t += RV.points;
+  steps.push({ at: t, act: "sum" }); t += RV.sum;
+  return { steps, total: t };
 }
 
 function playAgain() {
@@ -594,12 +613,24 @@ function renderJudge() {
 
 function renderReveal() {
   const s = state;
+  const opts = Object.values(s.results?.opts || {});
   app.innerHTML = `
-    <section class="stage judge">
-      <header class="stage-head"><h2>Resultados <small>Dibujo ${s.current.index} de ${s.current.total}</small></h2></header>
+    <section class="stage judge destape">
+      <header class="stage-head"><h2>El destape <small>Dibujo ${s.current.index} de ${s.current.total}</small></h2></header>
       <div class="judge-body">
         ${artworkHTML()}
-        <div class="judge-side"><div id="reveal-card" class="reveal-card"></div></div>
+        <div class="judge-side">
+          <ol class="options reveal-opts">${opts.map((o) => `
+            <li data-id="${o.id}">
+              <span class="opt-text">${esc(o.text)}</span>
+              <span class="opt-voters"></span>
+              <span class="stamp"></span>
+              <span class="gain-badge"></span>
+              <span class="burst"></span>
+            </li>`).join("")}
+          </ol>
+          <p class="reveal-caption" id="reveal-caption"></p>
+        </div>
       </div>
     </section>`;
 }
@@ -611,54 +642,185 @@ function clearReveal() {
 
 function runReveal() {
   clearReveal();
+  const r = state.results;
+  if (!r?.opts) return;
   Voice.say("suspense", { interrupt: true });
   const pid = state.phaseId;
-  (state.results?.seq || []).forEach((o, i) => {
-    revealTimers.push(setTimeout(() => {
-      if (state?.phaseId !== pid) return;
-      renderRevealCard(o);
-      speakReveal(o);
-    }, REVEAL_INTRO + i * REVEAL_STEP));
+  const plan = revealPlan(r);
+  // Si la tele se recarga a mitad de destape, se retoma por el acto que toca.
+  const elapsed = Math.max(0, plan.total - Math.max(0, (state.deadline || 0) - serverNow()) - 500);
+  for (const st of plan.steps) {
+    const wait = st.at - elapsed;
+    if (wait < -800 && st.act !== "sum") { revealTimers.push(setTimeout(() => replayStep(st, pid), 0)); continue; }
+    revealTimers.push(setTimeout(() => { if (state?.phaseId === pid) playStep(st); }, Math.max(0, wait)));
+  }
+}
+
+// Al retomar, los actos ya pasados se dejan pintados sin sonido.
+function replayStep(st, pid) {
+  if (state?.phaseId !== pid) return;
+  if (st.act === "fuera") st.list.forEach((o) => markOut(o, true));
+  if (st.act === "lie") markLie(st.o, true);
+  if (st.act === "truth") markTruth(st.o, true);
+  if (st.act === "points") renderPoints(true);
+}
+
+function playStep(st) {
+  switch (st.act) {
+    case "fuera": {
+      st.list.forEach((o, i) => setTimeout(() => markOut(o), i * 450));
+      caption(st.list.length === 1 ? "Esta no ha colado a nadie." : "Estas no han colado a nadie.");
+      return Voice.say(st.list.some((o) => o.kind === "house") && st.list.length === 1 ? "casa" : "nadiePico", { interrupt: true });
+    }
+    case "lie": {
+      markLie(st.o);
+      const n = st.o.voters.length;
+      const ms = Sfx.play("picado");
+      const pid = state.phaseId;
+      caption(n === 1 ? `${nameOf(st.o.voters[0])} ha picado.` : `Han picado ${n}.`);
+      return setTimeout(() => {
+        if (state?.phaseId !== pid) return;
+        Voice.say(st.o.kind === "house" ? "casa" : n >= 2 ? "coloMuchos" : "colo", { interrupt: true });
+      }, Math.min(ms || 0, 2000));
+    }
+    case "truth": {
+      markTruth(st.o);
+      const n = st.o.voters.length;
+      const judges = active().filter((p) => p.uid !== state.current?.artist).length;
+      caption(n ? `Lo dibujó ${nameOf(state.current.artist)}.` : "No la acertó nadie.");
+      return Voice.say(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad", { interrupt: true });
+    }
+    case "points": Music.play("fiesta"); setScene("scores"); return renderPoints();
+    case "sum": return runSum();
+  }
+}
+
+function caption(text) {
+  const c = $("#reveal-caption");
+  if (!c) return;
+  c.textContent = text;
+  c.classList.remove("pop");
+  void c.offsetWidth;
+  c.classList.add("pop");
+}
+
+const optEl = (o) => app.querySelector(`.reveal-opts li[data-id="${o?.id}"]`);
+function votersHTML(o, delay = 0.25) {
+  return o.voters.map((u, i) => {
+    const p = state.players?.[u];
+    return p ? `<span class="flyer" style="animation-delay:${(delay + i * 0.22).toFixed(2)}s">${avatarHTML(p, "tiny")}<b>${esc(p.name)}</b></span>` : "";
+  }).join("");
+}
+
+function markOut(o, still = false) {
+  const li = optEl(o);
+  if (!li) return;
+  li.querySelector(".stamp").textContent = o.kind === "house" ? "De la casa" : "Nadie picó";
+  li.classList.add("fuera");
+  if (still) li.classList.add("still");
+}
+
+function markLie(o, still = false) {
+  const li = optEl(o);
+  if (!li) return;
+  app.querySelectorAll(".reveal-opts li").forEach((x) => x.classList.toggle("apagada", x !== li && !x.classList.contains("fuera")));
+  const who = o.kind === "house" ? "Mentira de la casa" : `Mentira de ${(o.authors || []).map(nameOf).join(" y ")}`;
+  li.querySelector(".opt-voters").innerHTML = votersHTML(o);
+  li.querySelector(".stamp").textContent = who;
+  li.querySelector(".gain-badge").textContent = o.kind === "house" ? "" : `+${500 * o.voters.length}`;
+  li.classList.add("mentira", "foco");
+  if (still) li.classList.add("still");
+  setTimeout(() => li.classList.remove("foco"), still ? 0 : RV.lie - 600);
+}
+
+function markTruth(o, still = false) {
+  const li = optEl(o);
+  if (!li) return;
+  app.querySelectorAll(".reveal-opts li").forEach((x) => x.classList.toggle("apagada", x !== li));
+  li.querySelector(".opt-voters").innerHTML = votersHTML(o);
+  li.querySelector(".stamp").textContent = "¡La verdad!";
+  li.querySelector(".gain-badge").textContent = o.voters.length ? `+1000 c/u · +${500 * o.voters.length} al artista` : "0";
+  li.classList.add("verdad", "foco");
+  if (still) li.classList.add("still");
+}
+
+/* --- Puntos de este dibujo → clasificación general --- */
+function pointsRows() {
+  const r = state.results;
+  return sortedPlayers(state).map((p) => ({ p, gain: r.gains?.[p.uid] || 0, prev: r.prev?.[p.uid] ?? Math.max(0, (p.score || 0) - (r.gains?.[p.uid] || 0)) }));
+}
+
+function renderPoints(still = false) {
+  const r = state.results;
+  const rows = pointsRows().sort((a, b) => b.gain - a.gain);
+  const title = r.last ? `Fin de la ronda ${r.round} de ${r.rounds}` : `Dibujo ${state.current.index} de ${state.current.total}`;
+  app.innerHTML = `
+    <section class="stage marcador">
+      <header class="stage-head"><h2 id="board-title">Puntos de este dibujo <small>${title}</small></h2></header>
+      <div class="board" id="board">${rows.map(({ p, gain, prev }, i) => `
+        <div class="brow" data-uid="${p.uid}" style="animation-delay:${(i * 0.09).toFixed(2)}s">
+          <span class="pos">${i + 1}</span>${avatarHTML(p, "tiny")}
+          <span class="pname">${esc(p.name)}</span>
+          <span class="gain ${gain ? "" : "cero"}" data-gain="${gain}">${still ? `+${gain}` : "+0"}</span>
+          <span class="move"></span>
+          <span class="score" data-prev="${prev}">${prev}</span>
+        </div>`).join("")}
+      </div>
+    </section>`;
+  if (!still) app.querySelectorAll(".gain").forEach((el, i) => setTimeout(() => countUp(el, 0, +el.dataset.gain, 900, "+"), 350 + i * 120));
+}
+
+function countUp(el, from, to, ms, prefix = "") {
+  const t0 = performance.now();
+  const tick = (t) => {
+    const k = Math.min(1, (t - t0) / ms);
+    const v = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+    el.textContent = prefix + v;
+    if (k < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function runSum() {
+  const r = state.results;
+  if (!$("#board")) renderPoints(true);
+  const board = $("#board");
+  const rows = pointsRows();
+  const rank = (key) => [...rows].sort((a, b) => (b[key] - a[key]) || a.p.name.localeCompare(b.p.name)).map((x) => x.p.uid);
+  const before = rank("prev");
+  rows.forEach((x) => { x.total = x.prev + x.gain; });
+  const after = rank("total");
+  const t = $("#board-title");
+  if (t) t.removeAttribute("data-dance");
+  if (t) t.innerHTML = `La clasificación <small>${r.last ? `Fin de la ronda ${r.round} de ${r.rounds}` : `Tras el dibujo ${state.current.index} de ${state.current.total}`}</small>`;
+  Sfx.play("aplausos");
+  // 1) Los puntos del dibujo «vuelan» a la puntuación total.
+  board.querySelectorAll(".brow").forEach((row) => {
+    const x = rows.find((y) => y.p.uid === row.dataset.uid);
+    row.querySelector(".gain").classList.add("sumando");
+    countUp(row.querySelector(".score"), x.prev, x.total, 1300);
   });
-}
-
-function renderRevealCard(o) {
-  const s = state;
-  const el = $("#reveal-card");
-  if (!el) return;
-  const voters = (o.voters || []).map((u) => s.players?.[u]).filter(Boolean);
-  let verdict;
-  if (o.kind === "truth") {
-    verdict = `<p class="verdict truth">¡LA VERDAD!</p>` + (voters.length
-      ? `<p class="points">+1000 a quien acertó · +${500 * voters.length} para ${esc(nameOf(s.current.artist))}</p>`
-      : `<p class="points">Nadie acertó. Ni el artista sabría qué dibujó.</p>`);
-  } else if (o.kind === "lie") {
-    const names = (o.authors || []).map((u) => esc(nameOf(u))).join(" y ");
-    verdict = `<p class="verdict lie">Mentira de ${names}</p><p class="points">+${500 * voters.length} puntos</p>`;
-  } else {
-    verdict = `<p class="verdict lie">Mentira de la casa</p><p class="points">Aquí no gana nadie. Bueno, yo.</p>`;
-  }
-  el.innerHTML = `
-    <div class="rc-inner pop ${o.kind}">
-      <p class="rc-text">«${esc(o.text)}»</p>
-      <div class="voters">${voters.map((p) => `<span class="voter">${avatarHTML(p, "tiny")}${esc(p.name)}</span>`).join("")
-        || `<span class="muted">Nadie lo votó</span>`}</div>
-      ${verdict}
-    </div>`;
-}
-
-function speakReveal(o) {
-  const n = (o.voters || []).length;
-  if (o.kind === "lie") {
-    // Alguien se la ha tragado: batacazo de dibujos animados y, después, la presentadora.
-    const ms = n > 0 ? Sfx.play("picado") : 0;
-    const pid = state.phaseId;
-    const say = () => { if (state?.phaseId === pid) Voice.say(n >= 2 ? "coloMuchos" : "colo"); };
-    return ms ? setTimeout(say, Math.min(ms, 2200)) : say();
-  }
-  if (o.kind === "house") return Voice.say("casa");
-  const judges = active().filter((p) => p.uid !== state.current?.artist).length;
-  Voice.say(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad");
+  // 2) Las filas se recolocan según la nueva clasificación (FLIP), con flechas y corona.
+  setTimeout(() => {
+    if (!board.isConnected) return;
+    const first = new Map([...board.children].map((el) => [el.dataset.uid, el.getBoundingClientRect().top]));
+    after.forEach((uid) => board.appendChild(board.querySelector(`[data-uid="${uid}"]`)));
+    [...board.children].forEach((el, i) => {
+      const dy = first.get(el.dataset.uid) - el.getBoundingClientRect().top;
+      if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }], { duration: 700, easing: "cubic-bezier(.3,1.3,.5,1)" });
+      el.querySelector(".pos").textContent = i + 1;
+      const was = before.indexOf(el.dataset.uid);
+      const mv = el.querySelector(".move");
+      mv.textContent = was > i ? `▲${was - i}` : was < i ? `▼${i - was}` : "";
+      mv.className = `move ${was > i ? "sube" : was < i ? "baja" : ""}`;
+      el.classList.toggle("lider", i === 0 && rows.find((y) => y.p.uid === el.dataset.uid).total > 0);
+    });
+    const newLeader = after[0] !== before[0] && rows.find((y) => y.p.uid === after[0]).total > 0 && rows.some((y) => y.prev > 0);
+    if (newLeader) {
+      board.querySelector(".lider")?.classList.add("nuevo");
+      Voice.say("lider", { interrupt: true });
+    } else if (r.last) Voice.say("marcador", { interrupt: true });
+  }, 1700);
 }
 
 function boardHTML(list, offset = 0) {
