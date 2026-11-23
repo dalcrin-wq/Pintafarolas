@@ -908,7 +908,9 @@ function winTitle() {
 // ---------- Final: la gala de premios y el podio ----------
 // Orden de la gala: de lo más absurdo a lo más deseado.
 const GALA_ORDER = ["minimal", "serio", "color", "credulo", "nadie", "mentiroso", "favorito"];
-const GALA = { intro: 4200, drum: 600, open: 3300, award: 8600, pod: [1800, 3800, 7600], buttons: 9400 };
+// El redoble (audio/sfx/redoble.mp3) da el platillazo a los ~2 s: se lanza para que caiga justo al abrir.
+const CRASH = 2000;
+const GALA = { intro: 4200, open: 3300, award: 8800, pod: [2000, 4000, 7800], buttons: 9800 };
 
 function namesHTML(uids) {
   const ps = uids.map((u) => state.players?.[u]).filter(Boolean);
@@ -965,7 +967,7 @@ function runGala(awards) {
   let t = GALA.intro;
   awards.forEach((a, i) => {
     later(t, () => showAward(a, i, awards.length));
-    later(t + GALA.drum, () => Sfx.play("redoble"));
+    later(t + GALA.open - CRASH, () => Sfx.play("redoble"));
     later(t + GALA.open, () => openAward(a));
     t += GALA.award;
   });
@@ -1008,7 +1010,7 @@ function runPodium() {
   const times = GALA.pod.slice(3 - pods.length);
   pods.forEach((pod, i) => {
     const first = pod.dataset.pos === "1";
-    if (first) later(times[i] - 2700, () => Sfx.play("redoble"));
+    if (first) later(times[i] - CRASH, () => Sfx.play("redoble"));
     later(times[i], () => {
       pod.classList.remove("oculto");
       pod.classList.add("sube");
