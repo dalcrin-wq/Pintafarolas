@@ -10,7 +10,7 @@ import { startMotion, refreshGradients } from "./motion.js";
 import { computeAwards } from "./awards.js";
 
 // Se ve en el menú: así se sabe de un vistazo si la tele tiene la última versión.
-const VERSION = "24 nov · 21:45";
+const VERSION = "24 nov · 22:00";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
