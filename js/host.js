@@ -9,7 +9,7 @@ import { startMotion, refreshGradients } from "./motion.js";
 import { computeAwards } from "./awards.js";
 
 // Se ve en el menú: así se sabe de un vistazo si la tele tiene la última versión.
-const VERSION = "24 nov · 15:10";
+const VERSION = "24 nov · 15:40";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -1215,6 +1215,18 @@ const GALA = { intro: 4200, open: 3300, award: 8800, pod: [2000, 4000, 7800], bu
 
 const puestoFinal = (p, r) => 1 + r.filter((x) => (x.score || 0) > (p.score || 0)).length;
 
+// Marco de museo: volutas dibujadas en las esquinas y una concha arriba y abajo.
+const VOLUTA = `<path d="M6 58 C 6 26, 26 6, 58 6" class="m-borde"/>
+  <path d="M14 56 C 12 34, 22 20, 40 16 C 52 13, 60 22, 54 30 C 49 37, 39 33, 42 26" class="m-rizo"/>
+  <path d="M56 14 C 34 12, 20 22, 16 40 C 13 52, 22 60, 30 54 C 37 49, 33 39, 26 42" class="m-rizo"/>
+  <circle cx="20" cy="20" r="7" class="m-perla"/>`;
+const MARCO = `<span class="marco-orla" aria-hidden="true">
+  ${["tl", "tr", "bl", "br"].map((c) => `<svg class="m-esq m-${c}" viewBox="0 0 64 64">${VOLUTA}</svg>`).join("")}
+  ${["arriba", "abajo"].map((c) => `<svg class="m-concha m-${c}" viewBox="0 0 120 50">
+    <path d="M10 46 C 18 10, 102 10, 110 46 Z" class="m-borde"/>
+    ${[22, 38, 60, 82, 98].map((x) => `<path d="M60 46 L ${x} ${x === 60 ? 12 : 22}" class="m-rizo"/>`).join("")}
+    <circle cx="60" cy="44" r="6" class="m-perla"/></svg>`).join("")}</span>`;
+
 // Cartel de «se busca» para el mentiroso de oro, con el dibujo del delito al lado.
 function seBuscaHTML(a) {
   const carteles = a.winners.map((u) => state.players?.[u]).filter(Boolean).map((p) => `
@@ -1324,7 +1336,7 @@ function showAward(a, i, n) {
       <div class="sobre" aria-hidden="true"><span class="sobre-solapa"></span><span class="sobre-sello">G</span></div>
       <div class="award-winner">
         ${a.id === "mentiroso" ? seBuscaHTML(a) : `
-        ${a.img ? `<figure class="award-art">${a.id === "serio" ? `<span class="marco-orla" aria-hidden="true"></span>` : ""}<img src="${safeImg(a.img)}" alt="">${a.caption ? `<figcaption>${esc(a.caption)}</figcaption>` : ""}</figure>` : ""}
+        ${a.img ? `<figure class="award-art">${a.id === "serio" ? `${MARCO}` : ""}<img src="${safeImg(a.img)}" alt="">${a.caption ? `<figcaption>${esc(a.caption)}</figcaption>` : ""}</figure>` : ""}
         <div class="award-names">${namesHTML(a.winners)}</div>`}
         <p class="award-stat">${esc(a.stat || "")}</p>
       </div>
@@ -1451,6 +1463,8 @@ function showFinal({ still, keepVoice = false }) {
   fin.querySelectorAll(".pod").forEach((p) => p.classList.add("baila"));
   $("#estrella")?.remove();
   $("#teatro")?.classList.remove("cerrado", "foco");
+  // El público aplaude un rato y se agacha para no tapar los botones.
+  later(7000, () => $("#publico")?.classList.remove("aplaude", "fiesta"));
   $("#skip").hidden = true;
   if (!still) {
     Sfx.play("ovacion");
