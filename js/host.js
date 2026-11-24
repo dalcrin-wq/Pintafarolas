@@ -1449,3 +1449,25 @@ async function boot() {
 startPainter();
 startMotion(() => Music.groove());
 boot();
+
+// La tele suele quedarse encendida días: si hay versión nueva publicada, se actualiza sola
+// (solo en el menú o en la sala, nunca a mitad de partida).
+const ARCHIVOS = ["index.html", "js/host.js", "js/voice.js", "js/music.js", "js/sfx.js", "js/painter.js", "js/motion.js",
+  "js/awards.js", "js/prompts.js", "js/track.js", "js/util.js", "js/firebase.js", "css/style.css"];
+let huella = null;
+async function huellaActual() {
+  const t = await Promise.all(ARCHIVOS.slice(0, 2).concat("css/style.css").map((f) => fetch(f, { cache: "no-store" }).then((r) => r.text())));
+  return t.map((x) => `${x.length}:${x.slice(-80)}`).join("|");
+}
+setInterval(async () => {
+  try {
+    const h = await huellaActual();
+    if (huella === null) { huella = h; return; }
+    const quieto = !state || ["lobby", "end"].includes(state.phase) || /^(menu|settings)/.test(viewKey);
+    if (h !== huella && quieto) {
+      await Promise.all(ARCHIVOS.map((f) => fetch(f, { cache: "reload" }).catch(() => {})));
+      location.reload();
+    }
+  } catch { /* sin red: ya lo intentará luego */ }
+}, 120000);
+huellaActual().then((h) => { huella = h; }).catch(() => {});
