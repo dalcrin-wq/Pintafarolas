@@ -9,7 +9,7 @@ import { startMotion, refreshGradients } from "./motion.js";
 import { computeAwards } from "./awards.js";
 
 // Se ve en el menú: así se sabe de un vistazo si la tele tiene la última versión.
-const VERSION = "24 nov · 10:55";
+const VERSION = "24 nov · 15:10";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -746,6 +746,17 @@ const TECHNIQUES = [
   "Óleo sobre móvil", "Dedo sobre cristal", "Técnica mixta: prisa y fe", "Pulgar sobre pantalla",
   "Garabato al temple", "Escuela de la servilleta", "Acuarela sin agua", "Realismo optimista",
   "Expresionismo de sofá", "Arte conceptual (muy conceptual)",
+  "Huella dactilar con grasa de patatas", "Temple de pulgar sudado", "Óleo de autobús en marcha",
+  "Rotulador seco sobre ilusión", "Grafito imaginario", "Pixel sobre esperanza", "Técnica de la abuela con prisa",
+  "Barroco de sobremesa", "Cubismo involuntario", "Surrealismo de lunes", "Impresionismo con temblor",
+  "Minimalismo por falta de tiempo", "Escuela del margen del cuaderno", "Arte rupestre digital",
+  "Óleo sobre excusa", "Carboncillo de barbacoa", "Expresionismo abstracto (sin querer)", "Puntillismo nervioso",
+  "Fresco de nevera", "Mural de puerta de baño", "Retrato robot de comisaría", "Garabato de llamada telefónica",
+  "Técnica del dedo meñique", "Pastel sin azúcar", "Realismo mágico (más mágico que real)", "Escuela de la cola del súper",
+  "Arte povera, muy povera", "Neoclasicismo de ascensor", "Dadaísmo de grupo de WhatsApp", "Pop art de mercadillo",
+  "Gótico flamígero de pupitre", "Naíf de autoescuela", "Vanguardia de sobremesa larga", "Romanticismo con prisas",
+  "Tinta china del bazar", "Acrílico emocional", "Bodegón con hambre", "Paisaje de memoria (mala)",
+  "Escuela de Altamira, sucursal móvil", "Óleo sobre pantalla rota", "Grafiti de servilleta de bar", "Hiperrealismo fallido",
 ];
 function technique(uid = "", round = 1) {
   let h = round * 31;
@@ -1204,6 +1215,39 @@ const GALA = { intro: 4200, open: 3300, award: 8800, pod: [2000, 4000, 7800], bu
 
 const puestoFinal = (p, r) => 1 + r.filter((x) => (x.score || 0) > (p.score || 0)).length;
 
+// Cartel de «se busca» para el mentiroso de oro, con el dibujo del delito al lado.
+function seBuscaHTML(a) {
+  const carteles = a.winners.map((u) => state.players?.[u]).filter(Boolean).map((p) => `
+    <div class="se-busca">
+      <p class="sb-wanted">WANTED</p>
+      <p class="sb-sub">Se busca por mentir</p>
+      <div class="sb-foto">${avatarHTML(p)}</div>
+      <p class="sb-nombre">${esc(p.name)}</p>
+      <p class="sb-recompensa">Recompensa: 500 puntos por víctima</p>
+    </div>`).join("");
+  return `<div class="sb-fila">${carteles}
+    ${a.img ? `<figure class="award-art sb-delito"><img src="${safeImg(a.img)}" alt=""><figcaption>${esc(a.caption || "")}</figcaption></figure>` : ""}</div>`;
+}
+
+// El teatro: cortinas rojas dibujadas a los lados durante la gala; se cierran para el ganador.
+function cortinaSVG(lado) {
+  const pliegues = [38, 76, 114, 152, 190, 228, 266].map((x, i) => `
+    <path d="M${x} 0 C ${x + (i % 2 ? 10 : -10)} 320, ${x + (i % 2 ? -12 : 12)} 640, ${x} 950" class="pliegue"/>
+    <path d="M${x + 12} 10 C ${x + 20} 320, ${x + 4} 640, ${x + 14} 940" class="brillo"/>`).join("");
+  return `<svg class="cortina cortina-${lado}" viewBox="0 0 300 1000" preserveAspectRatio="none">
+    <defs><linearGradient id="tela-${lado}" x1="0" x2="1">
+      ${Array.from({ length: 8 }, (_, i) => `<stop offset="${i / 7}" stop-color="${i % 2 ? "#c0283f" : "#8f1730"}"/>`).join("")}
+    </linearGradient></defs>
+    <path d="M0 0 H300 V955 Q 262 1000 225 962 Q 187 1000 150 958 Q 112 1000 75 962 Q 37 1000 0 955 Z" fill="url(#tela-${lado})" class="tela"/>
+    ${pliegues}
+  </svg>`;
+}
+function teatroHTML() {
+  return `<div class="teatro" id="teatro" aria-hidden="true">
+    ${cortinaSVG("izq")}${cortinaSVG("der")}
+    <div class="bambalina"></div><div class="foco-luz"></div></div>`;
+}
+
 function namesHTML(uids) {
   const ps = uids.map((u) => state.players?.[u]).filter(Boolean);
   return ps.map((p) => `<span class="aw-person">${avatarHTML(p)}<b>${esc(p.name)}</b></span>`).join("");
@@ -1221,7 +1265,7 @@ function renderEnd() {
         <div class="podium">${r.slice(0, 3).map((p) => {
           const pos = puestoFinal(p, r); // empates: mismo puesto
           return `
-          <div class="pod p${pos}" data-pos="${pos}">${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
+          <div class="pod p${pos}" data-pos="${pos}" data-uid="${p.uid}">${avatarHTML(p)}<span class="pname">${esc(p.name)}</span>
             <span class="score">${p.score || 0}</span><div class="block">${pos}</div></div>`;
         }).join("")}
         </div>
@@ -1235,6 +1279,7 @@ function renderEnd() {
         </div>
       </div>
       <button class="btn ghost small skip" id="skip" hidden>Saltar la gala</button>
+      ${teatroHTML()}
     </section>`;
   $("#again").onclick = playAgain;
   $("#menu").onclick = () => { Music.calmUntilVoiceEnds(); Voice.say("adios", { interrupt: true }); showMenu(); };
@@ -1278,8 +1323,9 @@ function showAward(a, i, n) {
       <p class="award-desc">${esc(a.desc)}</p>
       <div class="sobre" aria-hidden="true"><span class="sobre-solapa"></span><span class="sobre-sello">G</span></div>
       <div class="award-winner">
-        ${a.img ? `<figure class="award-art"><img src="${safeImg(a.img)}" alt="">${a.caption ? `<figcaption>${esc(a.caption)}</figcaption>` : ""}</figure>` : ""}
-        <div class="award-names">${namesHTML(a.winners)}</div>
+        ${a.id === "mentiroso" ? seBuscaHTML(a) : `
+        ${a.img ? `<figure class="award-art">${a.id === "serio" ? `<span class="marco-orla" aria-hidden="true"></span>` : ""}<img src="${safeImg(a.img)}" alt="">${a.caption ? `<figcaption>${esc(a.caption)}</figcaption>` : ""}</figure>` : ""}
+        <div class="award-names">${namesHTML(a.winners)}</div>`}
         <p class="award-stat">${esc(a.stat || "")}</p>
       </div>
     </article>`;
@@ -1301,9 +1347,16 @@ function openAward(a) {
 
 // Público de cartón para el 3.º y el 2.º (cutre a propósito).
 function publicoHTML() {
-  const n = 18;
+  const n = 16;
+  const caras = ["M40 58 Q50 66 60 58", "M41 60 Q50 54 59 60", "M44 59 H56", "M42 57 Q50 70 58 57 Z"];
   return `<div class="publico" id="publico" aria-hidden="true">${Array.from({ length: n }, (_, i) => `
-    <span class="fan" style="--i:${i}; --h:${(i * 47) % 360}; --d:${((i * 37) % 9) / 10}s; --s:${0.85 + ((i * 13) % 5) / 10}"><i></i></span>`).join("")}</div>`;
+    <svg class="fan" viewBox="0 0 100 130" style="--d:${((i * 37) % 9) / 10}s; --s:${0.8 + ((i * 13) % 6) / 10}">
+      <path class="brazo bi" d="M30 92 L12 48"/><path class="brazo bd" d="M70 92 L88 48"/>
+      <path class="cuerpo" d="M22 130 C 22 98, 78 98, 78 130 Z" style="fill:hsl(${(i * 47) % 360} 45% 62%)"/>
+      <circle class="cabeza" cx="50" cy="52" r="22" style="fill:hsl(${(i * 29 + 20) % 60 + 15} 55% 78%)"/>
+      <circle cx="43" cy="49" r="2.6" class="ojo"/><circle cx="57" cy="49" r="2.6" class="ojo"/>
+      <path class="boca" d="${caras[i % caras.length]}"/>
+    </svg>`).join("")}</div>`;
 }
 
 function runPodium() {
@@ -1315,7 +1368,7 @@ function runPodium() {
   fin.querySelectorAll(".pod").forEach((p) => p.classList.add("oculto"));
   $("#win-title").classList.add("oculto");
   fin.querySelectorAll("#end-buttons, .palmares, .board.compact").forEach((x) => x.classList.add("oculto"));
-  fin.insertAdjacentHTML("beforeend", publicoHTML() + `<div class="apagon" id="apagon" hidden><p class="apagon-t" id="apagon-t"></p></div>`);
+  fin.insertAdjacentHTML("beforeend", publicoHTML());
   Voice.say("podio", { interrupt: true });
   const pods = [...fin.querySelectorAll(".pod")];
   const puestos = [...new Set(pods.map((p) => +p.dataset.pos))].sort((a, b) => b - a).filter((p) => p !== 1);
@@ -1334,34 +1387,58 @@ function runPodium() {
     });
     t += 4600;
   }
-  // 1.º: apagón, redoble… ¡pum! y el nombre en grande.
-  const ap = $("#apagon"), apT = $("#apagon-t");
+  // 1.º: se cierra el telón, foco, redoble… se abre y aparece el ganador en grande;
+  // luego salta a su puesto del podio y todos bailan.
+  const teatro = $("#teatro");
   later(t, () => {
-    ap.hidden = false;
-    ap.classList.add("negro");
+    publico.classList.remove("aplaude");
+    teatro.classList.add("cerrado");
+    Sfx.play("revelar", { rate: 0.7 });
     Music.duck(true);
     Voice.say("anuncio", { interrupt: true });
+    later(1100, () => teatro.classList.add("foco"));
   });
   later(t + 1400, () => Sfx.play("redoble"));
+  const w = winners();
   later(t + 1400 + CRASH, () => {
-    const w = winners();
-    apT.innerHTML = `${w.length > 1 ? "¡Empate!" : "¡Gana"} ${w.map((p) => `<span>${esc(p.name)}</span>`).join(" y ")}${w.length > 1 ? "" : "!"}`;
-    ap.classList.add("pum");
+    fin.insertAdjacentHTML("beforeend", `<div class="estrella" id="estrella">
+      <div class="estrella-caras">${w.map((p) => `<div class="estrella-cara" data-uid="${p.uid}">${avatarHTML(p)}</div>`).join("")}</div>
+      <p class="estrella-nombre">${w.length > 1 ? "¡Empate! " : "¡Gana "}${w.map((p) => `<span>${esc(p.name)}</span>`).join(" y ")}${w.length > 1 ? "" : "!"}</p></div>`);
+    teatro.classList.remove("cerrado");
     Sfx.play("fanfarria");
     later(200, () => Sfx.play("ovacion"));
-  });
-  // Se enciende la luz: los tres en el podio, bailando, y Lola despide la partida.
-  later(t + 1400 + CRASH + 2600, () => {
-    ap.classList.add("luz");
-    Music.duck(false);
-    pods.forEach((p) => { p.classList.remove("oculto"); p.classList.add("baila"); });
-    $("#win-title").classList.remove("oculto");
     publico.classList.add("aplaude", "fiesta");
-    Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true });
-    Voice.say("despedida");
-    later(900, () => { ap.hidden = true; });
+    Voice.say(w.length > 1 ? "empate" : "ganador", { interrupt: true });
   });
-  later(t + 1400 + CRASH + 4200, () => showFinal({ still: true, keepVoice: true }));
+  // Salto al podio.
+  later(t + 1400 + CRASH + 3000, () => {
+    teatro.classList.remove("foco");
+    Music.duck(false);
+    const est = $("#estrella");
+    est?.querySelector(".estrella-nombre")?.classList.add("vete");
+    est?.querySelectorAll(".estrella-cara").forEach((cara) => {
+      const pod = fin.querySelector(`.pod[data-uid="${cara.dataset.uid}"]`);
+      const dest = pod?.querySelector(".avatar")?.getBoundingClientRect();
+      const ori = cara.getBoundingClientRect();
+      if (!dest || !ori.width) return;
+      const dx = dest.left + dest.width / 2 - (ori.left + ori.width / 2), dy = dest.top + dest.height / 2 - (ori.top + ori.height / 2);
+      const k = dest.width / ori.width;
+      Sfx.play("pop");
+      cara.animate([
+        { transform: "translate(0,0) scale(1)" },
+        { transform: `translate(${dx * 0.5}px, ${Math.min(dy * 0.5, 0) - 160}px) scale(${(1 + k) / 2}) rotate(-12deg)`, offset: 0.45 },
+        { transform: `translate(${dx}px, ${dy}px) scale(${k})` },
+      ], { duration: 900, easing: "cubic-bezier(.4,0,.3,1)", fill: "forwards" });
+    });
+    later(950, () => {
+      est?.remove();
+      Sfx.play("acierto");
+      pods.forEach((p) => { p.classList.remove("oculto"); p.classList.add("baila"); });
+      $("#win-title").classList.remove("oculto");
+      Voice.say("despedida");
+    });
+  });
+  later(t + 1400 + CRASH + 4600, () => showFinal({ still: true, keepVoice: true }));
 }
 
 function showFinal({ still, keepVoice = false }) {
@@ -1372,6 +1449,8 @@ function showFinal({ still, keepVoice = false }) {
   requestAnimationFrame(() => refreshGradients(fin));
   fin.querySelectorAll(".oculto").forEach((x) => x.classList.remove("oculto"));
   fin.querySelectorAll(".pod").forEach((p) => p.classList.add("baila"));
+  $("#estrella")?.remove();
+  $("#teatro")?.classList.remove("cerrado", "foco");
   $("#skip").hidden = true;
   if (!still) {
     Sfx.play("ovacion");

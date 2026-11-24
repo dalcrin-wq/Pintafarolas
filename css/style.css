@@ -622,36 +622,96 @@ body.player { padding: .9rem; }
 /* ---------- Gala: pie de foto del dibujo premiado ---------- */
 .award-art figcaption { margin-top: .6rem; max-width: min(34vh, 300px); text-align: center; font-weight: 900; font-size: clamp(.95rem, 1.5vw, 1.3rem); color: var(--tinta); }
 
-/* ---------- Podio: público de cartón, apagón y baile ---------- */
-.publico { position: fixed; left: 0; right: 0; bottom: -40px; height: 150px; display: flex; justify-content: space-around; align-items: flex-end; z-index: 4; pointer-events: none;
-  transform: translateY(110%); transition: transform .6s cubic-bezier(.3, 1.3, .5, 1); }
+/* ---------- Podio: público dibujado y baile ---------- */
+.publico { position: fixed; left: 0; right: 0; bottom: -24px; height: 150px; display: flex; justify-content: space-around; align-items: flex-end; z-index: 7; pointer-events: none;
+  transform: translateY(110%); transition: transform .6s cubic-bezier(.3, 1.3, .5, 1); filter: url(#rough-small); }
 .publico.aplaude { transform: none; }
-.fan { position: relative; width: 70px; height: 120px; transform: scale(var(--s)); transform-origin: bottom; }
-.fan::before { content: ""; position: absolute; left: 50%; bottom: 62px; width: 46px; height: 46px; margin-left: -23px; border-radius: 50%; background: hsl(var(--h) 25% 24%); }
-.fan::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 70px; height: 66px; margin-left: -35px; border-radius: 34px 34px 0 0; background: hsl(var(--h) 30% 20%); }
-.fan i { position: absolute; left: 50%; bottom: 40px; width: 96px; height: 14px; margin-left: -48px; z-index: -1; }
-.fan i::before, .fan i::after { content: ""; position: absolute; bottom: 0; width: 12px; height: 54px; border-radius: 8px; background: hsl(var(--h) 30% 22%); transform-origin: bottom; }
-.fan i::before { left: 6px; transform: rotate(-24deg); }
-.fan i::after { right: 6px; transform: rotate(24deg); }
+.fan { width: 92px; height: 120px; overflow: visible; transform: scale(var(--s)); transform-origin: bottom; }
+.fan path, .fan circle { stroke: #2b2440; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+.fan .ojo { fill: #2b2440; stroke: none; }
+.fan .boca { fill: none; }
+.fan .brazo { fill: none; stroke-width: 7; transform-box: view-box; }
+.fan .bi { transform-origin: 30px 92px; transform: rotate(-35deg); }
+.fan .bd { transform-origin: 70px 92px; transform: rotate(35deg); }
 .publico.aplaude .fan { animation: bota .42s var(--d) ease-in-out infinite alternate; }
-.publico.aplaude .fan i::before { animation: brazo-i .21s var(--d) ease-in-out infinite alternate; }
-.publico.aplaude .fan i::after { animation: brazo-d .21s var(--d) ease-in-out infinite alternate; }
+.publico.aplaude .fan .bi { animation: brazo-i .2s var(--d) ease-in-out infinite alternate; }
+.publico.aplaude .fan .bd { animation: brazo-d .2s var(--d) ease-in-out infinite alternate; }
 @keyframes bota { to { transform: scale(var(--s)) translateY(-14px) rotate(2deg); } }
-@keyframes brazo-i { to { transform: rotate(-4deg); } }
-@keyframes brazo-d { to { transform: rotate(4deg); } }
-.apagon { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; background: #0b0d18; opacity: 0; transition: opacity .7s; }
-.apagon[hidden] { display: none; }
-.apagon.negro { opacity: 1; }
-.apagon::before { content: ""; position: absolute; left: 50%; top: -10%; width: 60vmin; height: 120vh; margin-left: -30vmin; opacity: 0;
-  background: radial-gradient(ellipse at 50% 85%, rgba(255, 240, 190, .55), transparent 60%); clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%); transition: opacity .3s; }
-.apagon.pum::before { opacity: 1; }
-.apagon.pum { animation: flash .5s ease-out; }
-@keyframes flash { 0% { background: #fffbe8; } 100% { background: #0b0d18; } }
-.apagon-t { position: relative; margin: 0; padding: 0 1rem; text-align: center; font-family: var(--display); font-size: clamp(3rem, 9vw, 8rem); line-height: 1.05; color: #f6e9b4; opacity: 0; transform: scale(.3);
-  text-shadow: 0 0 30px rgba(240, 200, 90, .6), 6px 8px 0 rgba(0, 0, 0, .5); }
-.apagon-t span { color: #ecc35c; }
-.apagon.pum .apagon-t { opacity: 1; transform: scale(1); transition: transform .5s cubic-bezier(.2, 1.8, .4, 1), opacity .2s; }
-.apagon.luz { opacity: 0; transition: opacity .9s; }
+@keyframes brazo-i { from { transform: rotate(-35deg); } to { transform: rotate(8deg); } }
+@keyframes brazo-d { from { transform: rotate(35deg); } to { transform: rotate(-8deg); } }
+
+/* ---------- El teatro: cortinas, bambalina y foco ---------- */
+.teatro { position: fixed; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+.cortina { position: absolute; top: 0; height: 104vh; width: 53vw; filter: url(#rough) drop-shadow(8px 0 0 rgba(30, 20, 40, .35));
+  transition: transform 1.2s cubic-bezier(.6, 0, .25, 1); will-change: transform; }
+.cortina-izq { left: 0; transform: translateX(-78%) skewX(2deg); transform-origin: top left; }
+.cortina-der { right: 0; transform: translateX(78%) skewX(-2deg) scaleX(-1); transform-origin: center top; }
+.cortina .tela { stroke: #3a1020; stroke-width: 4; }
+.cortina .pliegue { fill: none; stroke: #4e0f22; stroke-width: 4; stroke-linecap: round; opacity: .75; }
+.cortina .brillo { fill: none; stroke: #ee6d7c; stroke-width: 3; stroke-linecap: round; opacity: .5; }
+.teatro.cerrado .cortina-izq { transform: translateX(0) skewX(0); }
+.teatro.cerrado .cortina-der { transform: translateX(0) skewX(0) scaleX(-1); }
+.bambalina { position: absolute; left: -2vw; right: -2vw; top: -6px; height: 11vh; filter: url(#rough);
+  background: radial-gradient(circle at 50% 0, #b12238 0 62%, #4e0f22 64% 68%, transparent 70%) 0 0 / 8vw 100% repeat-x;
+  border-top: 5vh solid #9c1b33; box-shadow: inset 0 -3px 0 #4e0f22; }
+.bambalina::after { content: ""; position: absolute; left: 0; right: 0; top: -1vh; height: 6px; background: repeating-linear-gradient(90deg, #e9c15f 0 22px, #b8883e 22px 30px); }
+.foco-luz { position: absolute; inset: 0; opacity: 0; transition: opacity .6s; z-index: 1; }
+.foco-luz::before { content: ""; position: absolute; left: 50%; top: 50%; width: 300vmax; height: 300vmax; margin: -150vmax 0 0 -150vmax;
+  background: radial-gradient(circle, rgba(255, 244, 200, .32) 0 15vmin, rgba(255, 244, 200, .1) 21vmin, rgba(10, 6, 22, .72) 27vmin); }
+.foco-luz::after { content: ""; position: absolute; left: 50%; top: -5vh; width: 40vmin; height: 60vh; margin-left: -20vmin;
+  background: linear-gradient(rgba(255, 244, 200, .28), rgba(255, 244, 200, .05)); clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%); }
+.teatro.foco .foco-luz { opacity: 1; }
+.teatro.foco .foco-luz::before { animation: barre 1.5s ease-in-out; }
+@keyframes barre { 0% { transform: translate(-32vw, 10vh); } 40% { transform: translate(26vw, -6vh); } 75% { transform: translate(-8vw, 4vh); } 100% { transform: none; } }
+.end .corner-row, .end .skip { z-index: 9; }
+
+/* El ganador sale al centro con el foco y luego salta a su puesto. */
+.estrella { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; pointer-events: none; }
+.estrella-caras { display: flex; gap: 4vw; }
+.estrella-cara { animation: estrella-sale .7s cubic-bezier(.2, 1.8, .4, 1) both; }
+.estrella-cara .avatar { width: 30vmin; height: 30vmin; font-size: 12vmin; box-shadow: inset 0 0 0 6px var(--pizarra), 10px 14px 0 -2px rgba(0, 0, 0, .45); }
+@keyframes estrella-sale { from { transform: scale(0) rotate(-30deg); } }
+.estrella-nombre { margin: 0; padding: 0 1rem; text-align: center; font-family: var(--display); font-size: clamp(2.6rem, 7vw, 6.5rem); line-height: 1.05; color: #f6e9b4;
+  text-shadow: 0 0 30px rgba(240, 200, 90, .6), 6px 8px 0 rgba(0, 0, 0, .5); animation: estrella-sale .6s .15s cubic-bezier(.2, 1.8, .4, 1) both; transition: opacity .3s, transform .3s; }
+.estrella-nombre span { color: #ecc35c; }
+.estrella-nombre.vete { opacity: 0; transform: scale(.6); }
+
+/* ---------- Premios especiales: marco de museo y cartel de se busca ---------- */
+.award[data-award="serio"] .award-art { position: relative; padding: 34px; transform: rotate(0); background:
+    repeating-linear-gradient(45deg, rgba(255, 240, 180, .35) 0 3px, transparent 3px 9px),
+    linear-gradient(135deg, #f6dc8a, #b9862f 30%, #f3d27a 50%, #8e6220 72%, #e8c46a);
+  box-shadow: inset 0 0 0 4px #6e4a14, inset 0 0 0 9px #f3d886, inset 0 0 0 13px #7a5418, inset 0 0 0 22px #c99a44, inset 0 0 0 26px #5e3e10,
+    12px 16px 0 -2px rgba(30, 34, 64, .55); filter: url(#rough-small); }
+.award[data-award="serio"] .award-art img { box-shadow: 0 0 0 3px #5e3e10, inset 0 0 30px rgba(80, 50, 10, .25); }
+.marco-orla { position: absolute; inset: 0; pointer-events: none; background:
+    radial-gradient(circle at 17px 17px, #fff0b8 0 5px, #b9862f 6px 12px, #6e4a14 13px 15px, transparent 16px) top left / 50% 50% no-repeat,
+    radial-gradient(circle at calc(100% - 17px) 17px, #fff0b8 0 5px, #b9862f 6px 12px, #6e4a14 13px 15px, transparent 16px) top right / 50% 50% no-repeat,
+    radial-gradient(circle at 17px calc(100% - 17px), #fff0b8 0 5px, #b9862f 6px 12px, #6e4a14 13px 15px, transparent 16px) bottom left / 50% 50% no-repeat,
+    radial-gradient(circle at calc(100% - 17px) calc(100% - 17px), #fff0b8 0 5px, #b9862f 6px 12px, #6e4a14 13px 15px, transparent 16px) bottom right / 50% 50% no-repeat; }
+.marco-orla::before { content: "❦"; position: absolute; top: -.3rem; left: 50%; transform: translateX(-50%); font-size: 2.4rem; line-height: 1; color: #f6dc8a; text-shadow: 1px 2px 0 #5e3e10; }
+.award[data-award="serio"] .award-art figcaption { margin: 1.1rem auto -.6rem; padding: .3rem .9rem; border-radius: 4px; color: #3a2a0c;
+  background: linear-gradient(#f3d886, #c99a44); box-shadow: inset 0 0 0 2px #6e4a14, 2px 3px 0 rgba(30, 34, 64, .4); }
+.award[data-award="serio"] .award-art.vivo, .award.abierto[data-award="serio"] .award-art { animation: brilla-marco 2.4s 1s ease-in-out infinite alternate; }
+@keyframes brilla-marco { to { filter: url(#rough-small) brightness(1.12); } }
+
+.sb-fila { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1.6rem 2.4rem; }
+.se-busca { position: relative; width: min(30vh, 260px); padding: 1.4rem 1.1rem 1.2rem; text-align: center; color: #3b2412; transform: rotate(-3deg);
+  font-family: Georgia, "Times New Roman", serif; filter: url(#rough-small);
+  background: radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, .35), transparent 50%), radial-gradient(circle at 80% 85%, rgba(120, 70, 20, .3), transparent 40%),
+    var(--paper-tex, none), linear-gradient(170deg, #f1dcaa, #d9b878 60%, #c49a5a);
+  clip-path: polygon(0 3%, 6% 0, 14% 2%, 25% 0, 37% 2%, 50% 0, 63% 2%, 76% 0, 88% 2%, 100% 0, 98% 12%, 100% 26%, 97% 41%, 100% 56%, 98% 71%, 100% 86%, 97% 100%, 84% 98%, 70% 100%, 55% 97%, 41% 100%, 27% 98%, 13% 100%, 2% 97%, 0 84%, 2% 69%, 0 54%, 3% 39%, 0 24%, 2% 12%);
+  box-shadow: inset 0 0 40px rgba(110, 60, 20, .45); }
+.se-busca::before { content: ""; position: absolute; top: .45rem; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #d9d9d9, #555 70%); }
+.sb-wanted { margin: .3rem 0 0; font-size: clamp(2rem, 4.4vw, 3.2rem); font-weight: 900; letter-spacing: .08em; line-height: 1; }
+.sb-sub { margin: .2rem 0 .7rem; font-weight: 700; font-style: italic; font-size: clamp(.85rem, 1.3vw, 1.1rem); border-top: 2px solid #3b2412; border-bottom: 2px solid #3b2412; padding: .15rem 0; }
+.sb-foto { display: grid; place-items: center; padding: .5rem; background: rgba(255, 244, 214, .55); box-shadow: inset 0 0 0 3px #3b2412; }
+.sb-foto .avatar { width: min(18vh, 150px); height: min(18vh, 150px); font-size: 4rem; filter: sepia(.85) contrast(1.1); }
+.sb-nombre { margin: .6rem 0 .2rem; font-size: clamp(1.4rem, 2.6vw, 2rem); font-weight: 900; }
+.sb-recompensa { margin: 0; font-weight: 700; font-size: clamp(.8rem, 1.2vw, 1rem); }
+.sb-delito { transform: rotate(3deg); }
+.award.abierto .se-busca { animation: clava .6s .35s cubic-bezier(.2, 1.6, .4, 1) both; }
+@keyframes clava { from { transform: translateY(-50vh) rotate(-25deg); } 70% { transform: rotate(-1deg); } }
+@media (prefers-reduced-motion: reduce) { .teatro.foco .foco-luz::before, .estrella-cara, .award.abierto .se-busca { animation: none; } .cortina { transition: none; } }
 .pod.baila .avatar { animation: baila-pod .5s ease-in-out infinite alternate; }
 .pod.baila:nth-child(2) .avatar { animation-delay: .25s; }
 .pod.baila.p1 .avatar { animation-name: baila-pod-1; }
