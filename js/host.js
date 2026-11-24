@@ -7,6 +7,9 @@ import { Sfx } from "./sfx.js";
 import { startPainter, setScene } from "./painter.js";
 import { startMotion, refreshGradients } from "./motion.js";
 import { computeAwards } from "./awards.js";
+
+// Se ve en el menú: así se sabe de un vistazo si la tele tiene la última versión.
+const VERSION = "24 nov · 10:55";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -142,6 +145,7 @@ function showMenu() {
       </div>
       <p class="hint">Pon esta pantalla en la tele. Los demás juegan con el móvil.</p>
       <p class="hint small">flechas para moverte · Enter para elegir</p>
+      <p class="hint small version">versión ${VERSION}</p>
     </section>`;
   $("#play").onclick = () => { unlockAudio(); Sfx.play("jugar"); createRoom(); };
   $("#cfg").onclick = () => { unlockAudio(); Voice.say("ajustes"); showSettings(); };
