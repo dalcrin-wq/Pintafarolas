@@ -9,7 +9,7 @@ import { startMotion, refreshGradients } from "./motion.js";
 import { computeAwards } from "./awards.js";
 
 // Se ve en el menú: así se sabe de un vistazo si la tele tiene la última versión.
-const VERSION = "24 nov · 15:40";
+const VERSION = "24 nov · 16:10";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -33,7 +33,7 @@ const RV = { intro: 1900, fuera: 3400, lie: 6200, truth: 7000, points: 3600, sum
 const app = $("#app");
 let settings = loadSettings();
 let me = null, code = null, roomRef = null, state = null, unsub = null;
-let endLive = false;
+let endLive = false, demoGala = false;
 let tickedAt = "";
 let viewKey = "", timer = null, advancedFor = -1;
 let revealTimers = [], usedPrompts = new Set(), knownPlayers = new Map(), primed = false;
@@ -142,6 +142,7 @@ function showMenu() {
       <div class="menu-buttons">
         <button class="btn big" id="play">Jugar</button>
         <button class="btn ghost" id="cfg">Ajustes</button>
+        ${/[?&]gala\b/.test(location.search) ? `<button class="btn ghost" id="demo">Ver la gala</button>` : ""}
       </div>
       <p class="hint">Pon esta pantalla en la tele. Los demás juegan con el móvil.</p>
       <p class="hint small">flechas para moverte · Enter para elegir</p>
@@ -149,6 +150,7 @@ function showMenu() {
     </section>`;
   $("#play").onclick = () => { unlockAudio(); Sfx.play("jugar"); createRoom(); };
   $("#cfg").onclick = () => { unlockAudio(); Voice.say("ajustes"); showSettings(); };
+  if ($("#demo")) $("#demo").onclick = () => { unlockAudio(); Sfx.play("jugar"); verGala(); };
   $("#play").focus();
 }
 
@@ -224,6 +226,91 @@ async function createRoom() {
   }
 }
 
+// «Ver la gala»: una partida de mentira ya terminada, para ver los premios sin jugar.
+function garabato(pintar) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 320;
+  const x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.fillRect(0, 0, 320, 320);
+  x.lineCap = x.lineJoin = "round";
+  let trazos = 0;
+  const raya = (color, ancho, pts) => {
+    x.strokeStyle = color; x.lineWidth = ancho; x.beginPath();
+    pts.forEach(([a, b], i) => { const j = () => (Math.random() - 0.5) * 3; i ? x.lineTo(a + j(), b + j()) : x.moveTo(a, b); });
+    x.stroke(); trazos++;
+  };
+  const circulo = (color, ancho, cx, cy, r) => raya(color, ancho, Array.from({ length: 26 }, (_, i) => [cx + r * Math.cos(i / 4), cy + r * Math.sin(i / 4)]));
+  pintar({ raya, circulo });
+  return { img: c.toDataURL("image/jpeg", 0.7), strokes: trazos };
+}
+const DEMO_DIBUJOS = [
+  // Pocos trazos: el minimalista.
+  ["c", 1, "Un calçot con gafas de sol", ({ raya, circulo }) => {
+    raya("#3a3", 9, [[160, 290], [150, 160], [130, 40]]); circulo("#222", 6, 130, 120, 22); circulo("#222", 6, 180, 120, 22); }],
+  // Muchísimos trazos: el que se lo tomó en serio.
+  ["b", 1, "Mi suegra en patinete", ({ raya, circulo }) => {
+    circulo("#d9577f", 5, 160, 90, 40);
+    for (let i = 0; i < 18; i++) raya("#7a4a2a", 3, [[125 + i * 4, 55], [118 + i * 4.5, 30 - (i % 4) * 4]]);
+    raya("#222", 4, [[145, 85], [150, 85]]); raya("#222", 4, [[172, 85], [177, 85]]); raya("#c33", 4, [[148, 108], [160, 114], [172, 108]]);
+    raya("#36c", 6, [[160, 130], [160, 220]]); raya("#36c", 6, [[160, 150], [110, 120]]); raya("#36c", 6, [[160, 150], [215, 175]]);
+    raya("#36c", 6, [[160, 220], [130, 260]]); raya("#36c", 6, [[160, 220], [195, 258]]);
+    raya("#555", 7, [[90, 265], [240, 265]]); raya("#555", 6, [[225, 265], [215, 150], [190, 140]]);
+    circulo("#222", 6, 105, 280, 14); circulo("#222", 6, 225, 280, 14);
+    for (let i = 0; i < 12; i++) raya("#aaa", 2, [[20 + i * 5, 200 + (i % 3) * 20], [60 + i * 3, 200 + (i % 3) * 20]]);
+    for (let i = 0; i < 8; i++) raya("#e9c15f", 3, [[270, 40], [270 + 35 * Math.cos(i * 0.8), 40 + 35 * Math.sin(i * 0.8)]]); }],
+  // Una sola tinta: alérgico al color (y además el dibujo que nadie acertó).
+  ["a", 1, "Un pulpo haciendo la declaración de la renta", ({ raya, circulo }) => {
+    circulo("#222", 6, 160, 110, 55);
+    for (let i = 0; i < 8; i++) raya("#222", 5, [[110 + i * 14, 160], [100 + i * 16, 220 + (i % 2) * 20], [120 + i * 14, 270]]);
+    raya("#222", 4, [[220, 190], [300, 190], [300, 300], [220, 300], [220, 190]]); raya("#222", 3, [[235, 220], [285, 220]]); raya("#222", 3, [[235, 245], [285, 245]]); }],
+  ["d", 2, "La Sagrada Família terminada", ({ raya }) => {
+    [70, 120, 170, 220, 260].forEach((x, i) => raya(["#a3c", "#e0855f", "#3a3", "#36c", "#a3c"][i], 8, [[x, 300], [x + 15, 60 + (i % 2) * 40], [x + 30, 300]]));
+    raya("#e9c15f", 5, [[40, 300], [290, 300]]); for (let i = 0; i < 6; i++) raya("#c33", 4, [[60 + i * 40, 30], [70 + i * 40, 50]]); }],
+  ["a", 2, "Un perro que ha leído a Nietzsche", ({ raya, circulo }) => {
+    circulo("#222", 6, 150, 150, 60); circulo("#222", 6, 130, 140, 6); circulo("#222", 6, 170, 140, 6); raya("#222", 5, [[135, 180], [165, 180]]);
+    raya("#222", 6, [[95, 120], [80, 60], [120, 100]]); raya("#222", 6, [[205, 120], [220, 60], [180, 100]]); }],
+  ["c", 2, "Una paella que no quiere ir a la playa", ({ raya, circulo }) => {
+    circulo("#e9a13a", 10, 160, 180, 90); circulo("#c33", 6, 130, 160, 10); circulo("#3a3", 6, 190, 200, 10);
+    raya("#222", 5, [[140, 240], [160, 230], [180, 240]]); raya("#36c", 7, [[20, 60], [300, 60]]); }],
+];
+async function verGala() {
+  app.innerHTML = `<section class="menu"><p class="loading">Montando el teatro…</p></section>`;
+  try {
+    me = me || await login();
+    code = "G" + randCode().slice(1);
+    const players = {
+      a: { name: "Diego", score: 5400, joinedAt: 1 }, b: { name: "Laura", score: 4200, joinedAt: 2 },
+      c: { name: "Pau", score: 3100, joinedAt: 3 }, d: { name: "Marta", score: 1500, joinedAt: 4 },
+    };
+    const gallery = {};
+    DEMO_DIBUJOS.forEach(([artist, round, prompt, pintar], i) => {
+      const { img, strokes } = garabato(pintar);
+      const fuePulpo = artist === "a" && round === 1;
+      gallery[`${round}_${artist}`] = {
+        artist, round, prompt, img, strokes, inks: artist === "a" ? 1 : 2 + (i % 3),
+        truthVotes: fuePulpo ? 0 : 1, voters: 3, fooled: fuePulpo ? ["b", "c", "d"] : [],
+        gulped: fuePulpo ? { b: "Una lavadora con ansiedad", c: "Un calamar en una entrevista de trabajo", d: "Una lavadora con ansiedad" }
+          : artist === "b" ? { d: "Batman jubilado" } : {},
+        mentiras: fuePulpo ? [{ text: "Una lavadora con ansiedad", authors: ["c"], votes: 2 }, { text: "Un calamar en una entrevista de trabajo", authors: ["d"], votes: 1 }] : [],
+      };
+    });
+    const likes = { "1_b": { a: true, c: true, d: true }, "2_c": { a: true } };
+    demoGala = true;
+    await set(ref(db, `rooms/${code}`), {
+      host: me.uid, demo: true, phase: "end", phaseId: 2, createdAt: serverTimestamp(),
+      settings: roomSettings(), players, gallery, likes, round: 2,
+    });
+    sessionStorage.setItem("gt_room", code);
+    listen();
+  } catch (e) {
+    console.error(e);
+    demoGala = false;
+    app.innerHTML = `<section class="menu"><p class="error">No he podido montar la gala: ${esc(e.message)}</p>
+      <button class="btn" id="back">Volver</button></section>`;
+    $("#back").onclick = showMenu;
+  }
+}
+
 function listen() {
   roomRef = ref(db, `rooms/${code}`);
   unsub = onValue(roomRef, (snap) => {
@@ -247,7 +334,8 @@ function onState() {
   const key = `${state.phase}|${state.phaseId}`;
   if (key !== viewKey) {
     // ¿Veníamos de la partida (gala en directo) o es una recarga en mitad del final?
-    endLive = /^(drawing|lying|voting|reveal|scores)\|/.test(viewKey);
+    endLive = demoGala || /^(drawing|lying|voting|reveal|scores)\|/.test(viewKey);
+    demoGala = false;
     viewKey = key;
     setScene(state.phase);
     renderPhase();
@@ -1293,7 +1381,7 @@ function renderEnd() {
       <button class="btn ghost small skip" id="skip" hidden>Saltar la gala</button>
       ${teatroHTML()}
     </section>`;
-  $("#again").onclick = playAgain;
+  $("#again").onclick = state.demo ? () => { leaveRoom(); verGala(); } : playAgain;
   $("#menu").onclick = () => { Music.calmUntilVoiceEnds(); Voice.say("adios", { interrupt: true }); showMenu(); };
   if (live) runGala(awards);
   else showFinal({ still: true });
