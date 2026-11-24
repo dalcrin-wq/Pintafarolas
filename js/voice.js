@@ -1,6 +1,7 @@
 // Lola, la presentadora. Audios pregrabados con ElevenLabs (voz «Sofia»),
 // uno por frase, en audio/voz/<código>.mp3. El guion completo está en audio/voz/guion.tsv.
 import { Music } from "./music.js";
+import { DUR } from "./duraciones.js";
 
 const N = (prefix, n) => Array.from({ length: n }, (_, i) => `${prefix}-${String(i + 1).padStart(2, "0")}`);
 
@@ -48,6 +49,7 @@ export const MOMENTS = {
   descanso: N("descanso", 3),         // fin de ronda (no la última)
   remontada: N("remontada", 2),
   ganador: N("ganador", 4),
+  ganadorPodio: ["ganador-01", "ganador-03", "ganador-04"], // tras «el ganador es…» no repite la fórmula
   empate: N("empate", 2),
   otra: N("otra", 2),
   adios: ["adios-01"],
@@ -76,6 +78,7 @@ function playNext() {
   if (!queue.length) { Music.duck(false); Music.voiceIdle(); return; }
   const code = queue.shift();
   const audio = new Audio(`audio/voz/${code}.mp3`);
+  audio.__code = code;
   current = audio;
   Music.duck(true);
   const done = () => {
@@ -88,7 +91,35 @@ function playNext() {
   audio.play().catch(done);
 }
 
+// En las frases del podio, cuándo acaba el anuncio («En tercer lugar…») y empieza el chiste:
+// ahí sube el escalón. Medido sobre la forma de onda (ms).
+export const CORTE = {
+  "tercero-01": 1450, "tercero-02": 1650, "tercero-03": 780,
+  "segundo-01": 1350, "segundo-02": 1500, "segundo-03": 700,
+};
+
 export const Voice = {
+  /** Elige ya qué frase dirá en ese momento (para medir la coreografía antes de empezar). */
+  pick: (moment) => pickCode(moment),
+  /** Cuánto dura una frase, en ms (con o sin sonido: el ritmo no cambia al silenciar). */
+  ms: (code) => (code ? DUR[code] || 3000 : 0),
+  /** Cuánto le queda por hablar (lo que está diciendo + lo que tiene en cola), en ms. */
+  restante() {
+    if (!enabled) return 0;
+    let ms = queue.reduce((n, c) => n + (DUR[c] || 3000), 0);
+    if (current) {
+      const d = current.duration, t = current.currentTime;
+      ms += Number.isFinite(d) && d > 0 ? Math.max(0, d - t) * 1000 : DUR[current.__code] || 2000;
+    }
+    return ms;
+  },
+  /** Dice exactamente esa frase. */
+  sayCode(code, { interrupt = false } = {}) {
+    if (!enabled || !code || missing.has(code)) return;
+    if (interrupt) queue.length = 0;
+    queue.push(code);
+    playNext();
+  },
   setEnabled(v) {
     enabled = v;
     if (!v) this.stop();

@@ -1,7 +1,7 @@
 // Pantalla grande (tele/ordenador). Es el árbitro: decide cuándo cambia cada fase.
 import { login, db, ref, set, update, get, onValue, remove, serverTimestamp, serverNow } from "./firebase.js";
 import { PROMPTS, SPICY_PROMPTS, HOUSE_LIES } from "./prompts.js";
-import { Voice } from "./voice.js";
+import { Voice, CORTE } from "./voice.js";
 import { Music } from "./music.js";
 import { Sfx } from "./sfx.js";
 import { startPainter, setScene } from "./painter.js";
@@ -9,7 +9,7 @@ import { startMotion, refreshGradients } from "./motion.js";
 import { computeAwards } from "./awards.js";
 
 // Se ve en el menú: así se sabe de un vistazo si la tele tiene la última versión.
-const VERSION = "24 nov · 16:10";
+const VERSION = "24 nov · 17:30";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -538,6 +538,9 @@ function startReveal() {
   for (const p of sortedPlayers(s)) prev[p.uid] = p.score || 0;
   const opts = (s.options || []).map((o) => byId[o.id]);
   const results = { opts, gains, prev, last: !(s.queue || []).length, round: s.round, rounds: s.settings?.rounds || 1 };
+  results.voz = vocesDestape(results);
+  // Si Lola aún está acabando una frase (p. ej. «a votar» y habéis votado rapidísimo), se la espera.
+  results.espera = Math.round(Voice.restante());
   const upd = {};
   for (const [u, n] of Object.entries(gains)) upd[`players/${u}/score`] = (s.players?.[u]?.score || 0) + n;
   // Para los premios del final: un registro por dibujo.
@@ -563,19 +566,66 @@ function startReveal() {
 
 // Cronograma del destape: 1) fuera las mentiras que no votó nadie, 2) una a una las que
 // colaron, 3) la verdad, 4) puntos de este dibujo, 5) se suman a la clasificación.
-function revealPlan(r) {
+function actosDe(r) {
   // Firebase no guarda listas vacías: las recuperamos.
   const opts = Object.values(r?.opts || {}).map((o) => ({ ...o, voters: Object.values(o.voters || {}), authors: Object.values(o.authors || {}) }));
-  const unpicked = opts.filter((o) => o.kind !== "truth" && !o.voters.length);
-  const fooled = opts.filter((o) => o.kind !== "truth" && o.voters.length).sort((a, b) => a.voters.length - b.voters.length);
-  const truth = opts.find((o) => o.kind === "truth");
+  return {
+    unpicked: opts.filter((o) => o.kind !== "truth" && !o.voters.length),
+    fooled: opts.filter((o) => o.kind !== "truth" && o.voters.length).sort((a, b) => a.voters.length - b.voters.length),
+    truth: opts.find((o) => o.kind === "truth"),
+  };
+}
+
+// Qué dirá Lola en cada acto. Se decide al empezar el destape para que el cronograma
+// mida cada acto con la frase real: nadie se mueve hasta que Lola acaba (y respira).
+function vocesDestape(r) {
+  const { unpicked, fooled, truth } = actosDe(r);
+  const judges = active().filter((p) => p.uid !== state.current?.artist).length;
+  const v = { suspense: Voice.pick("suspense"), lies: {} };
+  if (unpicked.length) v.fuera = Voice.pick(unpicked.some((o) => o.kind === "house") && unpicked.length === 1 ? "casa" : "nadiePico");
+  for (const o of fooled) v.lies[o.id] = Voice.pick(o.kind === "house" ? "casa" : o.voters.length >= 2 ? "coloMuchos" : "colo");
+  const n = truth?.voters.length || 0;
+  v.truth = Voice.pick(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad");
+  const m = momentoSuma(r);
+  if (m) v.sum = Voice.pick(m);
+  return v;
+}
+
+// Al sumar al marcador: ¿alguien se pone líder, remonta, o se acaba la ronda?
+function momentoSuma(r) {
+  const rows = sortedPlayers(state).map((p) => ({ u: p.uid, name: p.name || "", prev: r.prev?.[p.uid] ?? 0, gain: r.gains?.[p.uid] || 0 }));
+  if (!rows.length) return null;
+  rows.forEach((x) => { x.total = x.prev + x.gain; });
+  const rank = (k) => [...rows].sort((a, b) => (b[k] - a[k]) || a.name.localeCompare(b.name));
+  const puesto = (k, v) => 1 + rows.filter((y) => y[k] > v).length;
+  const hayHistoria = rows.some((y) => y.prev > 0);
+  const top = rank("total")[0], antes = rank("prev")[0];
+  const solo = top.total > 0 && rows.filter((y) => y.total === top.total).length === 1;
+  const lideraba = antes.prev > 0 && rows.filter((y) => y.prev === antes.prev).length === 1 ? antes.u : null;
+  if (solo && top.u !== lideraba && hayHistoria) return "lider";
+  if (hayHistoria && rows.some((x) => puesto("prev", x.prev) - puesto("total", x.total) >= 2)) return "remontada";
+  if (r.last && r.round < r.rounds) return "descanso";
+  if (r.last) return "marcador";
+  return null;
+}
+
+// Pausas: lo que se deja respirar después de que Lola acabe, antes del siguiente acto.
+const RESPIRO = 700;
+function revealPlan(r) {
+  const { unpicked, fooled, truth } = actosDe(r);
+  const v = r?.voz || {};
+  const ms = Voice.ms;
   const steps = [];
-  let t = RV.intro;
-  if (unpicked.length) { steps.push({ at: t, act: "fuera", list: unpicked }); t += RV.fuera; }
-  for (const o of fooled) { steps.push({ at: t, act: "lie", o }); t += RV.lie; }
-  steps.push({ at: t, act: "truth", o: truth }); t += RV.truth;
-  steps.push({ at: t, act: "points" }); t += RV.points;
-  steps.push({ at: t, act: "sum" }); t += RV.sum;
+  let t = Math.max(RV.intro, (r?.espera || 0) + ms(v.suspense) + 400);
+  const paso = (st, len) => { steps.push({ ...st, at: t, len }); t += len; };
+  if (unpicked.length) paso({ act: "fuera", list: unpicked, voz: v.fuera }, Math.max(RV.fuera, ms(v.fuera) + RESPIRO + 200));
+  for (const o of fooled) {
+    const voz = v.lies?.[o.id];
+    paso({ act: "lie", o, voz }, Math.max(RV.lie, REDOBLE + 1050 + ms(voz) + RESPIRO));
+  }
+  paso({ act: "truth", o: truth, voz: v.truth }, Math.max(RV.truth, REDOBLE + 300 + ms(v.truth) + RESPIRO + 400));
+  paso({ act: "points" }, RV.points);
+  paso({ act: "sum", voz: v.sum }, Math.max(RV.sum, 1300 + ms(v.sum) + RESPIRO + 300));
   return { steps, total: t };
 }
 
@@ -1007,7 +1057,8 @@ function runReveal() {
   // Arranque: el dibujo encoge y baja para dejar sitio a las tarjetas.
   if (elapsed < 600) {
     Sfx.play("tic");
-    Voice.say("suspense", { interrupt: true });
+    if (r.voz?.suspense) Voice.sayCode(r.voz.suspense, { interrupt: true });
+    else Voice.say("suspense", { interrupt: true });
     revealTimers.push(setTimeout(() => { app.querySelector(".mesa")?.classList.add("encoge"); Sfx.play("revelar"); }, 450));
   } else app.querySelector(".mesa")?.classList.add("encoge");
   for (const st of plan.steps) {
@@ -1031,6 +1082,7 @@ function playStep(st) {
     case "fuera": {
       st.list.forEach((o, i) => setTimeout(() => markOut(o), i * 450));
       caption(st.list.length === 1 ? "Esta no ha colado a nadie." : "Estas no han colado a nadie.");
+      if (st.voz) return Voice.sayCode(st.voz, { interrupt: true });
       return Voice.say(st.list.some((o) => o.kind === "house") && st.list.length === 1 ? "casa" : "nadiePico", { interrupt: true });
     }
     case "lie": {
@@ -1045,8 +1097,8 @@ function playStep(st) {
         caption(n === 1 ? `${nameOf(st.o.voters[0])} ha picado.` : `Han picado ${n}.`);
         later2(650, () => { Sfx.play("fallo"); Sfx.play("picado", { vol: 0.6 }); });
         later2(1000, () => Sfx.play("puntos"));
-        later2(1050, () => Voice.say(st.o.kind === "house" ? "casa" : n >= 2 ? "coloMuchos" : "colo", { interrupt: true }));
-        later2(RV.lie - REDOBLE - 500, () => soltar(li));
+        later2(1050, () => st.voz ? Voice.sayCode(st.voz, { interrupt: true }) : Voice.say(st.o.kind === "house" ? "casa" : n >= 2 ? "coloMuchos" : "colo", { interrupt: true }));
+        later2((st.len || RV.lie) - REDOBLE - 500, () => soltar(li));
       });
     }
     case "truth": {
@@ -1064,11 +1116,11 @@ function playStep(st) {
         Sfx.play("revelar");
         later2(500, () => Sfx.play(n ? "acierto" : "fallo"));
         if (n) { later2(900, () => Sfx.play("puntos")); later2(1100, () => Sfx.play("aplausos", { vol: 0.7 })); }
-        later2(300, () => Voice.say(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad", { interrupt: true }));
+        later2(300, () => st.voz ? Voice.sayCode(st.voz, { interrupt: true }) : Voice.say(n === 0 ? "nadie" : n >= 2 && n === judges ? "todos" : "verdad", { interrupt: true }));
       });
     }
     case "points": setScene("scores"); return renderPoints();
-    case "sum": return runSum();
+    case "sum": return runSum(st.voz);
   }
 }
 
@@ -1211,7 +1263,7 @@ function countUp(el, from, to, ms, prefix = "") {
   requestAnimationFrame(tick);
 }
 
-function runSum() {
+function runSum(voz) {
   const r = state.results;
   if (!$("#board")) renderPoints(true);
   const board = $("#board");
@@ -1261,8 +1313,10 @@ function runSum() {
     if (newLeader) {
       board.querySelector(".lider")?.classList.add("nuevo");
       Sfx.play("fanfarria", { vol: 0.8 });
-      Voice.say("lider", { interrupt: true });
-    } else if (remonta) Voice.say("remontada", { interrupt: true });
+    }
+    if (r.voz) { if (voz) Voice.sayCode(voz, { interrupt: true }); }
+    else if (newLeader) Voice.say("lider", { interrupt: true });
+    else if (remonta) Voice.say("remontada", { interrupt: true });
     else if (r.last && r.round < r.rounds) Voice.say("descanso", { interrupt: true });
     else if (r.last) Voice.say("marcador", { interrupt: true });
   });
@@ -1299,7 +1353,7 @@ function winTitle() {
 const GALA_ORDER = ["minimal", "serio", "color", "credulo", "nadie", "mentiroso", "favorito"];
 // El redoble (audio/sfx/redoble.mp3) da el platillazo a los ~2 s: se lanza para que caiga justo al abrir.
 const CRASH = 2000;
-const GALA = { intro: 4200, open: 3300, award: 8800, pod: [2000, 4000, 7800], buttons: 9800 };
+const GALA = { intro: 4200, open: 3300, award: 8800, habla: 900 };
 
 const puestoFinal = (p, r) => 1 + r.filter((x) => (x.score || 0) > (p.score || 0)).length;
 
@@ -1402,15 +1456,20 @@ function runGala(awards) {
       <h2 class="gala-title">Los Garabatos de Oro</h2>
       <p class="gala-sub">${awards.length ? `${awards.length} premios que nadie ha pedido` : "Este año no hay premios: el jurado está de huelga"}</p>
     </div>`;
-  Voice.say("gala", { interrupt: true });
+  // Cronograma medido con las frases reales: cada premio dura lo que Lola tarde en comentarlo.
+  const vGala = Voice.pick("gala");
+  const antes = Voice.restante(); // si Lola aún acaba la frase del marcador, se la espera
+  Voice.sayCode(vGala, { interrupt: true });
   Sfx.play("fanfarria");
-  later(400, () => Sfx.play("aplausos", { vol: 0.8 }));
-  let t = GALA.intro;
+  later(400, () => Sfx.play("aplausos", { vol: 0.6 }));
+  let t = Math.max(GALA.intro, antes + Voice.ms(vGala) + 800);
   awards.forEach((a, i) => {
+    const voz = Voice.pick(a.voice);
     later(t, () => showAward(a, i, awards.length));
     later(t + GALA.open - CRASH, () => Sfx.play("redoble"));
     later(t + GALA.open, () => openAward(a));
-    t += GALA.award;
+    later(t + GALA.open + GALA.habla, () => Voice.sayCode(voz, { interrupt: true }));
+    t += GALA.open + Math.max(GALA.award - GALA.open, GALA.habla + Voice.ms(voz) + 1600);
   });
   later(t, () => runPodium());
 }
@@ -1440,9 +1499,8 @@ function openAward(a) {
   Sfx.play("revelar");
   later(350, () => Sfx.play("pop"));
   later(500, () => Sfx.play("acierto"));
-  later(700, () => Sfx.play("aplausos", { vol: 0.8 }));
-  later(900, () => Sfx.play("puntos"));
-  Voice.say(a.voice, { interrupt: true });
+  later(600, () => Sfx.play("aplausos", { vol: 0.6 }));
+  later(800, () => Sfx.play("puntos"));
 }
 
 // Público de cartón para el 3.º y el 2.º (cutre a propósito).
@@ -1469,51 +1527,59 @@ function runPodium() {
   $("#win-title").classList.add("oculto");
   fin.querySelectorAll("#end-buttons, .palmares, .board.compact").forEach((x) => x.classList.add("oculto"));
   fin.insertAdjacentHTML("beforeend", publicoHTML());
-  Voice.say("podio", { interrupt: true });
   const pods = [...fin.querySelectorAll(".pod")];
   const puestos = [...new Set(pods.map((p) => +p.dataset.pos))].sort((a, b) => b - a).filter((p) => p !== 1);
   const publico = $("#publico");
-  // 3.º y 2.º: suben, el público de cartón aplaude y Lola comenta.
-  let t = 2200;
+  const teatro = $("#teatro");
+  const w = winners();
+  // Todo se mide con las frases reales de Lola: habla, y entonces pasa la cosa.
+  const vPodio = Voice.pick("podio");
+  Voice.sayCode(vPodio, { interrupt: true });
+  let t = Voice.ms(vPodio) + 700;
+  // 3.º y 2.º: «En tercer lugar…» → sube el escalón y aplauden → el chiste.
   for (const pos of puestos) {
-    later(t, () => {
+    const voz = Voice.pick(pos === 3 ? "tercero" : "segundo");
+    const corte = CORTE[voz] ?? 1200;
+    later(t, () => Voice.sayCode(voz, { interrupt: true }));
+    later(t + corte + 150, () => {
       pods.filter((p) => +p.dataset.pos === pos).forEach((p) => { p.classList.remove("oculto"); p.classList.add("sube"); });
       Sfx.play("revelar");
       later(250, () => Sfx.play("pop"));
       publico.classList.add("aplaude");
-      later(300, () => Sfx.play("aplausos", { vol: 0.9 }));
-      Voice.say(pos === 3 ? "tercero" : "segundo", { interrupt: true });
-      later(3600, () => publico.classList.remove("aplaude"));
+      later(300, () => Sfx.play("aplausos", { vol: 0.45 }));
     });
-    t += 4600;
+    later(t + Voice.ms(voz) + 200, () => publico.classList.remove("aplaude"));
+    t += Voice.ms(voz) + 1000;
   }
-  // 1.º: se cierra el telón, foco, redoble… se abre y aparece el ganador en grande;
-  // luego salta a su puesto del podio y todos bailan.
-  const teatro = $("#teatro");
+  // 1.º: se cierra el telón y Lola anuncia «el ganador es…»; cuando calla, redoble a solas
+  // con el foco; ¡pum!, se abre y sale el ganador; aplausos; Lola lo felicita; salta al podio.
+  const vAnuncio = Voice.pick("anuncio");
   later(t, () => {
-    publico.classList.remove("aplaude");
     teatro.classList.add("cerrado");
     Sfx.play("revelar", { rate: 0.7 });
-    Music.duck(true);
-    Voice.say("anuncio", { interrupt: true });
+    Voice.sayCode(vAnuncio, { interrupt: true });
     later(1100, () => teatro.classList.add("foco"));
   });
-  later(t + 1400, () => Sfx.play("redoble"));
-  const w = winners();
-  later(t + 1400 + CRASH, () => {
+  const tRedoble = t + Math.max(1400, Voice.ms(vAnuncio)) + 350;
+  later(tRedoble, () => { Music.duck(true); Sfx.play("redoble"); });
+  const tPum = tRedoble + CRASH;
+  later(tPum, () => {
     fin.insertAdjacentHTML("beforeend", `<div class="estrella" id="estrella">
       <div class="estrella-caras">${w.map((p) => `<div class="estrella-cara" data-uid="${p.uid}">${avatarHTML(p)}</div>`).join("")}</div>
       <p class="estrella-nombre">${w.length > 1 ? "¡Empate! " : "¡Gana "}${w.map((p) => `<span>${esc(p.name)}</span>`).join(" y ")}${w.length > 1 ? "" : "!"}</p></div>`);
     teatro.classList.remove("cerrado");
+    Music.duck(false);
     Sfx.play("fanfarria");
     later(200, () => Sfx.play("ovacion"));
     publico.classList.add("aplaude", "fiesta");
-    Voice.say(w.length > 1 ? "empate" : "ganador", { interrupt: true });
   });
-  // Salto al podio.
-  later(t + 1400 + CRASH + 3000, () => {
+  const vGana = Voice.pick(w.length > 1 ? "empate" : "ganadorPodio");
+  const tGana = tPum + 1800; // primero que aplaudan
+  later(tGana, () => Voice.sayCode(vGana, { interrupt: true }));
+  // Salto al podio cuando acaba de felicitarlo.
+  const tSalto = tGana + Voice.ms(vGana) + 400;
+  later(tSalto, () => {
     teatro.classList.remove("foco");
-    Music.duck(false);
     const est = $("#estrella");
     est?.querySelector(".estrella-nombre")?.classList.add("vete");
     est?.querySelectorAll(".estrella-cara").forEach((cara) => {
@@ -1535,10 +1601,11 @@ function runPodium() {
       Sfx.play("acierto");
       pods.forEach((p) => { p.classList.remove("oculto"); p.classList.add("baila"); });
       $("#win-title").classList.remove("oculto");
-      Voice.say("despedida");
     });
   });
-  later(t + 1400 + CRASH + 4600, () => showFinal({ still: true, keepVoice: true }));
+  // Bailan, y Lola se despide con todos ya en el podio.
+  later(tSalto + 1500, () => Voice.sayCode(Voice.pick("despedida"), { interrupt: true }));
+  later(tSalto + 2600, () => showFinal({ still: true, keepVoice: true }));
 }
 
 function showFinal({ still, keepVoice = false }) {
@@ -1638,7 +1705,7 @@ boot();
 // La tele suele quedarse encendida días: si hay versión nueva publicada, se actualiza sola
 // (solo en el menú o en la sala, nunca a mitad de partida).
 const ARCHIVOS = ["index.html", "js/host.js", "js/voice.js", "js/music.js", "js/sfx.js", "js/painter.js", "js/motion.js",
-  "js/awards.js", "js/prompts.js", "js/track.js", "js/util.js", "js/firebase.js", "css/style.css"];
+  "js/awards.js", "js/duraciones.js", "js/prompts.js", "js/track.js", "js/util.js", "js/firebase.js", "css/style.css"];
 let huella = null;
 async function huellaActual() {
   const t = await Promise.all(ARCHIVOS.slice(0, 2).concat("css/style.css").map((f) => fetch(f, { cache: "no-store" }).then((r) => r.text())));
