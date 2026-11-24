@@ -450,18 +450,21 @@ function startReveal() {
   for (const [u, n] of Object.entries(gains)) upd[`players/${u}/score`] = (s.players?.[u]?.score || 0) + n;
   // Para los premios del final: un registro por dibujo.
   const st = s.drawStats?.[artist] || {};
-  const fooled = {}, gulped = {};
+  const fooled = {}, gulped = {}, mentiras = [];
   for (const o of opts) {
     if (o.kind === "truth") continue;
-    for (const v of o.voters) gulped[v] = true;
-    if (o.kind === "lie" && o.voters.length) for (const a of o.authors || []) fooled[a] = (fooled[a] || 0) + o.voters.length;
+    for (const v of o.voters) gulped[v] = o.text; // qué se creyó cada uno
+    if (o.kind === "lie" && o.voters.length) {
+      for (const a of o.authors || []) fooled[a] = (fooled[a] || 0) + o.voters.length;
+      mentiras.push({ text: o.text, authors: o.authors || [], votes: o.voters.length });
+    }
   }
   upd[`gallery/${s.round}_${artist}`] = {
     artist, round: s.round, img: s.drawings?.[artist] || "", prompt: s.prompts?.[artist] || "",
     strokes: st.strokes ?? null, inks: st.inks ?? null,
     truthVotes: opts.find((o) => o.kind === "truth")?.voters.length || 0,
     voters: Object.keys(s.votes || {}).filter((u) => u !== artist).length,
-    fooled, gulped,
+    fooled, gulped, mentiras,
   };
   return setPhase("reveal", { ...upd, results }, revealPlan(results).total / 1000 + 0.5);
 }
@@ -1137,6 +1140,7 @@ function runSum() {
     const soloEnCabeza = top.total > 0 && rows.filter((y) => y.total === top.total).length === 1;
     after.forEach((uid) => board.appendChild(board.querySelector(`[data-uid="${uid}"]`)));
     const hayHistoria = rows.some((y) => y.prev > 0);
+    let remonta = false;
     [...board.children].forEach((el) => {
       const dy = first.get(el.dataset.uid) - el.getBoundingClientRect().top;
       if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }], { duration: 700, easing: "cubic-bezier(.3,1.3,.5,1)" });
@@ -1144,6 +1148,7 @@ function runSum() {
       const now = puesto("total", x.total), was = puesto("prev", x.prev);
       el.querySelector(".pos").textContent = `${now}.º`;
       el.classList.toggle("sube", hayHistoria && was > now);
+      if (hayHistoria && was - now >= 2) remonta = true;
       el.classList.toggle("lider", now === 1 && soloEnCabeza);
     });
     Sfx.play("pop");
@@ -1154,7 +1159,9 @@ function runSum() {
       board.querySelector(".lider")?.classList.add("nuevo");
       Sfx.play("fanfarria", { vol: 0.8 });
       Voice.say("lider", { interrupt: true });
-    } else if (r.last) Voice.say("marcador", { interrupt: true });
+    } else if (remonta) Voice.say("remontada", { interrupt: true });
+    else if (r.last && r.round < r.rounds) Voice.say("descanso", { interrupt: true });
+    else if (r.last) Voice.say("marcador", { interrupt: true });
   });
 }
 
@@ -1267,7 +1274,7 @@ function showAward(a, i, n) {
       <p class="award-desc">${esc(a.desc)}</p>
       <div class="sobre" aria-hidden="true"><span class="sobre-solapa"></span><span class="sobre-sello">G</span></div>
       <div class="award-winner">
-        ${a.img ? `<figure class="award-art"><img src="${safeImg(a.img)}" alt=""></figure>` : ""}
+        ${a.img ? `<figure class="award-art"><img src="${safeImg(a.img)}" alt="">${a.caption ? `<figcaption>${esc(a.caption)}</figcaption>` : ""}</figure>` : ""}
         <div class="award-names">${namesHTML(a.winners)}</div>
         <p class="award-stat">${esc(a.stat || "")}</p>
       </div>
@@ -1288,6 +1295,13 @@ function openAward(a) {
   Voice.say(a.voice, { interrupt: true });
 }
 
+// Público de cartón para el 3.º y el 2.º (cutre a propósito).
+function publicoHTML() {
+  const n = 18;
+  return `<div class="publico" id="publico" aria-hidden="true">${Array.from({ length: n }, (_, i) => `
+    <span class="fan" style="--i:${i}; --h:${(i * 47) % 360}; --d:${((i * 37) % 9) / 10}s; --s:${0.85 + ((i * 13) % 5) / 10}"><i></i></span>`).join("")}</div>`;
+}
+
 function runPodium() {
   $("#gala").hidden = true;
   const fin = $("#final");
@@ -1297,25 +1311,53 @@ function runPodium() {
   fin.querySelectorAll(".pod").forEach((p) => p.classList.add("oculto"));
   $("#win-title").classList.add("oculto");
   fin.querySelectorAll("#end-buttons, .palmares, .board.compact").forEach((x) => x.classList.add("oculto"));
+  fin.insertAdjacentHTML("beforeend", publicoHTML() + `<div class="apagon" id="apagon" hidden><p class="apagon-t" id="apagon-t"></p></div>`);
   Voice.say("podio", { interrupt: true });
-  // Se destapa por puestos (3.º, 2.º, 1.º); los empatados salen a la vez.
   const pods = [...fin.querySelectorAll(".pod")];
-  const puestos = [...new Set(pods.map((p) => +p.dataset.pos))].sort((a, b) => b - a);
-  const times = GALA.pod.slice(3 - puestos.length);
-  puestos.forEach((pos, i) => {
-    const first = pos === 1;
-    if (first) later(times[i] - CRASH, () => Sfx.play("redoble"));
-    later(times[i], () => {
+  const puestos = [...new Set(pods.map((p) => +p.dataset.pos))].sort((a, b) => b - a).filter((p) => p !== 1);
+  const publico = $("#publico");
+  // 3.º y 2.º: suben, el público de cartón aplaude y Lola comenta.
+  let t = 2200;
+  for (const pos of puestos) {
+    later(t, () => {
       pods.filter((p) => +p.dataset.pos === pos).forEach((p) => { p.classList.remove("oculto"); p.classList.add("sube"); });
       Sfx.play("revelar");
-      if (!first) { later(250, () => Sfx.play("pop")); return later(400, () => Sfx.play("aplausos", { vol: 0.8 })); }
-      Sfx.play("fanfarria");
-      later(300, () => Sfx.play("ovacion"));
-      $("#win-title").classList.remove("oculto");
-      Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true });
+      later(250, () => Sfx.play("pop"));
+      publico.classList.add("aplaude");
+      later(300, () => Sfx.play("aplausos", { vol: 0.9 }));
+      Voice.say(pos === 3 ? "tercero" : "segundo", { interrupt: true });
+      later(3600, () => publico.classList.remove("aplaude"));
     });
+    t += 4600;
+  }
+  // 1.º: apagón, redoble… ¡pum! y el nombre en grande.
+  const ap = $("#apagon"), apT = $("#apagon-t");
+  later(t, () => {
+    ap.hidden = false;
+    ap.classList.add("negro");
+    Music.duck(true);
+    Voice.say("anuncio", { interrupt: true });
   });
-  later(GALA.buttons, () => showFinal({ still: true, keepVoice: true }));
+  later(t + 1400, () => Sfx.play("redoble"));
+  later(t + 1400 + CRASH, () => {
+    const w = winners();
+    apT.innerHTML = `${w.length > 1 ? "¡Empate!" : "¡Gana"} ${w.map((p) => `<span>${esc(p.name)}</span>`).join(" y ")}${w.length > 1 ? "" : "!"}`;
+    ap.classList.add("pum");
+    Sfx.play("fanfarria");
+    later(200, () => Sfx.play("ovacion"));
+  });
+  // Se enciende la luz: los tres en el podio, bailando, y Lola despide la partida.
+  later(t + 1400 + CRASH + 2600, () => {
+    ap.classList.add("luz");
+    Music.duck(false);
+    pods.forEach((p) => { p.classList.remove("oculto"); p.classList.add("baila"); });
+    $("#win-title").classList.remove("oculto");
+    publico.classList.add("aplaude", "fiesta");
+    Voice.say(winners().length > 1 ? "empate" : "ganador", { interrupt: true });
+    Voice.say("despedida");
+    later(900, () => { ap.hidden = true; });
+  });
+  later(t + 1400 + CRASH + 4200, () => showFinal({ still: true, keepVoice: true }));
 }
 
 function showFinal({ still, keepVoice = false }) {
@@ -1325,6 +1367,7 @@ function showFinal({ still, keepVoice = false }) {
   fin.hidden = false;
   requestAnimationFrame(() => refreshGradients(fin));
   fin.querySelectorAll(".oculto").forEach((x) => x.classList.remove("oculto"));
+  fin.querySelectorAll(".pod").forEach((p) => p.classList.add("baila"));
   $("#skip").hidden = true;
   if (!still) {
     Sfx.play("ovacion");

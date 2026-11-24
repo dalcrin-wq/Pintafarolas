@@ -13,24 +13,24 @@ export const MOMENTS = {
   espera: [...N("espera", 3), "silencio-01"],
   listos: N("listos", 2),
   empieza: N("empieza", 3),
-  dibujo: N("dibujo", 3),
-  mitad: N("mitad", 3),
+  dibujo: N("dibujo", 4),
+  mitad: N("mitad", 4),
   ultimosDibujo: N("ultimos-dib", 4),
   rapidos: N("rapidos", 2),
-  mentir: N("mentir", 5),
+  mentir: N("mentir", 7),
   prisaMentir: N("prisa-mentir", 2),
-  votar: N("votar", 4),
+  votar: N("votar", 5),
   prisaVotar: N("prisa-votar", 2),
   suspense: N("suspense", 3),
-  colo: N("colo", 4),
-  coloMuchos: N("colo-muchos", 3),
+  colo: N("colo", 7),
+  coloMuchos: N("colo-muchos", 5),
   casa: N("casa", 3),
-  nadiePico: N("nadie-pico", 4), // mentiras que no votó nadie: a la papelera
-  lider: N("lider", 3),           // alguien se pone en cabeza
-  verdad: N("verdad", 4),
-  nadie: N("nadie", 3),
-  todos: N("todos", 2),
-  marcador: N("marcador", 4),
+  nadiePico: N("nadie-pico", 6), // mentiras que no votó nadie: a la papelera
+  lider: N("lider", 4),           // alguien se pone en cabeza
+  verdad: N("verdad", 6),
+  nadie: N("nadie", 5),
+  todos: N("todos", 3),
+  marcador: N("marcador", 5),
   ultima: N("ultima", 2),
   gala: N("gala", 2),                 // empieza la gala de premios
   premioMinimal: N("premio-minimal", 2),
@@ -41,6 +41,12 @@ export const MOMENTS = {
   premioMentiroso: N("premio-mentiroso", 2),
   premioFavorito: N("premio-favorito", 2),
   podio: N("podio", 2),
+  tercero: N("tercero", 3),           // sube el 3.º (público de cartón)
+  segundo: N("segundo", 3),
+  anuncio: N("anuncio", 2),           // apagón: «el ganador es…»
+  despedida: N("despedida", 3),       // felicita, da las gracias, último chiste y «¿otra?»
+  descanso: N("descanso", 3),         // fin de ronda (no la última)
+  remontada: N("remontada", 2),
   ganador: N("ganador", 4),
   empate: N("empate", 2),
   otra: N("otra", 2),

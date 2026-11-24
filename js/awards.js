@@ -1,102 +1,78 @@
-// Premios del final. Se calculan a partir de la galería de la partida
-// (un registro por dibujo, que escribe la tele en cada destape) y de los ♥ de los móviles.
-// Lo usan la tele (la gala) y los móviles («tus premios»).
+// Premios del final. Cada premio se lo lleva UN DIBUJO concreto (o una mentira sobre un dibujo):
+// la gala es para recordar los momentos de la partida, no para enseñar medias.
+// Se calcula a partir de la galería (un registro por dibujo que escribe la tele en cada destape)
+// y de los ♥ de los móviles. Lo usan la tele (la gala) y los móviles («tus premios»).
 
 const count = (o) => Object.keys(o || {}).length;
-const sum = (o) => Object.values(o || {}).reduce((a, b) => a + (+b || 0), 0);
-const fmt = (x) => (Math.round(x * 10) / 10).toLocaleString("es-ES");
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
-
-/** Los ganadores de un máximo (o mínimo): todos los empatados. */
-function best(map, { min = false, floor = 1 } = {}) {
-  const entries = Object.entries(map).filter(([, v]) => (min ? true : v >= floor));
-  if (!entries.length) return { winners: [], value: 0 };
-  const value = min ? Math.min(...entries.map(([, v]) => v)) : Math.max(...entries.map(([, v]) => v));
-  return { winners: entries.filter(([, v]) => v === value).map(([u]) => u), value };
-}
+const vals = (o) => Object.values(o || {});
 
 export function computeAwards(state) {
   const players = state.players || {};
   const gallery = Object.entries(state.gallery || {})
-    .map(([key, g]) => ({ key, ...g }))
+    .map(([key, g]) => ({ key, ...g, mentiras: vals(g.mentiras).map((m) => ({ ...m, authors: vals(m.authors) })) }))
     .filter((g) => players[g.artist]);
   const likes = state.likes || {};
   const awards = [];
   if (!gallery.length) return awards;
+  const era = (g) => (g.prompt ? `Era «${g.prompt}»` : "");
+  const conTrazos = gallery.filter((g) => g.strokes != null && g.strokes > 0);
 
-  // 1) Dibujo favorito: el que más ♥ recibió.
-  const likeBy = Object.fromEntries(gallery.map((g) => [g.key, count(likes[g.key])]));
-  const fav = best(likeBy);
-  if (fav.winners.length) {
-    const ds = gallery.filter((g) => fav.winners.includes(g.key));
-    awards.push({
-      id: "favorito", voice: "premioFavorito", title: "Dibujo favorito", desc: "El que más ♥ se llevó del público",
-      winners: [...new Set(ds.map((g) => g.artist))], img: ds[0].img, caption: ds[0].prompt,
-      stat: plural(fav.value, "♥", "♥"),
-    });
+  // Dibujo favorito: el que más ♥ recibió.
+  const fav = [...gallery].sort((a, b) => count(likes[b.key]) - count(likes[a.key]))[0];
+  if (fav && count(likes[fav.key])) {
+    awards.push({ id: "favorito", voice: "premioFavorito", title: "Dibujo favorito", desc: "El que más ♥ se llevó del público",
+      winners: [fav.artist], img: fav.img, caption: era(fav), stat: plural(count(likes[fav.key]), "♥", "♥") });
   }
 
-  // 2) Mentiroso de oro: quien más gente engañó.
-  const fooled = {};
-  for (const g of gallery) for (const [u, n] of Object.entries(g.fooled || {})) fooled[u] = (fooled[u] || 0) + n;
-  const liar = best(fooled);
-  if (liar.winners.length) {
-    awards.push({
-      id: "mentiroso", voice: "premioMentiroso", title: "Mentiroso de oro", desc: "Quien más gente engañó",
-      winners: liar.winners, stat: `Engañó ${plural(liar.value, "vez", "veces")}`,
-    });
+  // Mentiroso de oro: LA mentira que más gente engañó, con su dibujo.
+  let best = null;
+  for (const g of gallery) for (const m of g.mentiras) if (!best || m.votes > best.m.votes) best = { g, m };
+  if (best && best.m.votes) {
+    awards.push({ id: "mentiroso", voice: "premioMentiroso", title: "Mentiroso de oro", desc: "La mentira que más gente se tragó",
+      winners: best.m.authors, img: best.g.img, caption: `Dijo que esto era «${best.m.text}»`, stat: `Engañó a ${plural(best.m.votes, "persona", "personas")}` });
   }
 
-  // 3) Se lo cree todo: quien más mentiras se tragó (las de la casa también cuentan).
-  const gulped = {};
-  for (const g of gallery) for (const u of Object.keys(g.gulped || {})) gulped[u] = (gulped[u] || 0) + 1;
-  const gull = best(gulped);
-  if (gull.winners.length) {
-    awards.push({
-      id: "credulo", voice: "premioCredulo", title: "Se lo cree todo", desc: "Quien más mentiras se tragó",
-      winners: gull.winners, stat: `Se tragó ${plural(gull.value, "mentira", "mentiras")}`,
-    });
+  // Se lo cree todo: quien más picó, con el dibujo y la trola que se creyó.
+  const picadas = {};
+  for (const g of gallery) for (const [u, txt] of Object.entries(g.gulped || {})) (picadas[u] ||= []).push({ g, txt });
+  const credulo = Object.entries(picadas).sort((a, b) => b[1].length - a[1].length)[0];
+  if (credulo && players[credulo[0]]) {
+    const [u, lista] = credulo;
+    const ej = lista.find((x) => typeof x.txt === "string") || lista[0];
+    awards.push({ id: "credulo", voice: "premioCredulo", title: "Se lo cree todo", desc: "Quien más mentiras se tragó",
+      winners: [u], img: ej.g.img, caption: typeof ej.txt === "string" ? `Se creyó que esto era «${ej.txt}»` : era(ej.g),
+      stat: `Picó ${plural(lista.length, "vez", "veces")}` });
   }
 
-  // 4) Nadie entendió nada: un dibujo que no acertó nadie (el que más despistó).
+  // Nadie entendió nada: el dibujo que no acertó nadie (el que más despistó).
   const lost = gallery.filter((g) => !g.truthVotes && g.voters > 0)
-    .sort((a, b) => sum(b.fooled) + count(b.gulped) - (sum(a.fooled) + count(a.gulped)));
+    .sort((a, b) => count(b.gulped) - count(a.gulped));
   if (lost.length) {
-    awards.push({
-      id: "nadie", voice: "premioNadie", title: "Nadie entendió nada", desc: "El dibujo que no acertó nadie",
-      winners: [lost[0].artist], img: lost[0].img, caption: lost[0].prompt, stat: `Era «${lost[0].prompt}»`,
-    });
+    awards.push({ id: "nadie", voice: "premioNadie", title: "Nadie entendió nada", desc: "El dibujo que no acertó nadie",
+      winners: [lost[0].artist], img: lost[0].img, caption: era(lost[0]), stat: "0 aciertos" });
   }
 
-  // 5 y 6) Trazos por dibujo: escuela minimalista y quien se lo tomó en serio.
-  const strokes = {}, drawn = {};
-  for (const g of gallery) {
-    if (g.strokes == null) continue; // dibujo sin datos de trazos (móvil antiguo)
-    strokes[g.artist] = (strokes[g.artist] || 0) + (+g.strokes || 0);
-    drawn[g.artist] = (drawn[g.artist] || 0) + 1;
-  }
-  const avg = Object.fromEntries(Object.keys(drawn).map((u) => [u, strokes[u] / drawn[u]]));
-  if (Object.keys(avg).length >= 2) {
-    const lo = best(avg, { min: true }), hi = best(avg, { floor: 0 });
-    if (hi.value > lo.value) {
-      awards.push({
-        id: "minimal", voice: "premioMinimal", title: "Escuela minimalista", desc: "Menos trazos por dibujo",
-        winners: lo.winners, stat: `${fmt(lo.value)} trazos por dibujo`,
-      });
-      awards.push({
-        id: "serio", voice: "premioSerio", title: "Se lo tomó en serio", desc: "Más trazos por dibujo",
-        winners: hi.winners, stat: `${fmt(hi.value)} trazos por dibujo`,
-      });
+  // Escuela minimalista y Se lo tomó en serio: el dibujo con menos y con más trazos.
+  if (conTrazos.length >= 2) {
+    const orden = [...conTrazos].sort((a, b) => a.strokes - b.strokes);
+    const lo = orden[0], hi = orden[orden.length - 1];
+    if (hi.strokes > lo.strokes) {
+      awards.push({ id: "minimal", voice: "premioMinimal", title: "Escuela minimalista", desc: "El dibujo con menos trazos",
+        winners: [lo.artist], img: lo.img, caption: era(lo), stat: plural(lo.strokes, "trazo", "trazos") });
+      awards.push({ id: "serio", voice: "premioSerio", title: "Se lo tomó en serio", desc: "El dibujo más currado",
+        winners: [hi.artist], img: hi.img, caption: era(hi), stat: plural(hi.strokes, "trazo", "trazos") });
     }
   }
 
-  // 7) Alérgico al color: una sola tinta en todos sus dibujos.
-  const mono = Object.keys(drawn).filter((u) => gallery.filter((g) => g.artist === u).every((g) => g.inks != null && +g.inks <= 1));
-  if (mono.length) {
-    awards.push({
-      id: "color", voice: "premioColor", title: "Alérgico al color", desc: "Una sola tinta en toda la partida",
-      winners: mono, stat: mono.length === Object.keys(drawn).length ? "Todos. Qué tristeza cromática" : "Ni un toque de color",
-    });
+  // Alérgico al color: quien no usó más que una tinta en toda la partida (si no fueron todos),
+  // con su dibujo más elaborado.
+  const artistas = [...new Set(gallery.map((g) => g.artist))];
+  const mono = artistas.filter((u) => gallery.filter((g) => g.artist === u).every((g) => g.inks != null && +g.inks <= 1));
+  if (mono.length && mono.length < artistas.length) {
+    const suyos = gallery.filter((g) => mono.includes(g.artist)).sort((a, b) => (b.strokes || 0) - (a.strokes || 0));
+    awards.push({ id: "color", voice: "premioColor", title: "Alérgico al color", desc: "Ni un toque de color en toda la partida",
+      winners: mono, img: suyos[0].img, caption: era(suyos[0]), stat: "Una sola tinta. Siempre." });
   }
   return awards;
 }
