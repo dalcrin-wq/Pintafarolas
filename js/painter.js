@@ -234,13 +234,16 @@ export function startPainter() {
   layer.setAttribute("aria-hidden", "true");
   document.body.prepend(layer);
 
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduceMQ = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // En modo ligero: un cuadro quieto por escena, sin zoom, sin fundidos y a resolución 1.
+  const ligero = () => document.documentElement.classList.contains("ligero");
   const CYCLE = 7000; // cada 7 s, otro cuadro parecido con otros colores
   const FADE = 3500;  // fundido largo y suave entre cuadros
   let current = null, painted = "", timer = null, variant = 0, lastSwap = 0;
 
   const show = (scene, v) => {
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    const reduce = reduceMQ || ligero();
+    const ratio = ligero() ? Math.min(1, 1280 / innerWidth) : Math.min(window.devicePixelRatio || 1, 1.5);
     const c = document.createElement("canvas");
     c.width = Math.round(innerWidth * ratio);
     c.height = Math.round(innerHeight * ratio);
@@ -278,9 +281,10 @@ export function startPainter() {
   addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(repaint, 250); });
   repaint();
 
-  if (!reduce) {
+  addEventListener("ligero", () => { painted = ""; repaint(); });
+  if (!reduceMQ) {
     setInterval(() => {
-      if (document.hidden || performance.now() - lastSwap < CYCLE - 200) return;
+      if (ligero() || document.hidden || performance.now() - lastSwap < CYCLE - 200) return;
       variant++;
       show(document.body.dataset.scene || "menu", variant);
     }, 500);

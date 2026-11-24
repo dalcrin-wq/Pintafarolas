@@ -4,12 +4,13 @@ import { PROMPTS, SPICY_PROMPTS, HOUSE_LIES } from "./prompts.js";
 import { Voice, CORTE } from "./voice.js";
 import { Music } from "./music.js";
 import { Sfx } from "./sfx.js";
+import { esLigero, ponLigero } from "./ligero.js";
 import { startPainter, setScene } from "./painter.js";
 import { startMotion, refreshGradients } from "./motion.js";
 import { computeAwards } from "./awards.js";
 
 // Se ve en el menú: así se sabe de un vistazo si la tele tiene la última versión.
-const VERSION = "24 nov · 17:30";
+const VERSION = "24 nov · 21:45";
 import { $, esc, shuffle, normalize, randCode, safeImg, avatarHTML, sortedPlayers } from "./util.js";
 
 export const TITLE = "Garabatrola";
@@ -146,7 +147,7 @@ function showMenu() {
       </div>
       <p class="hint">Pon esta pantalla en la tele. Los demás juegan con el móvil.</p>
       <p class="hint small">flechas para moverte · Enter para elegir</p>
-      <p class="hint small version">versión ${VERSION}</p>
+      <p class="hint small version">versión ${VERSION}${esLigero() ? " · modo ligero" : ""}</p>
     </section>`;
   $("#play").onclick = () => { unlockAudio(); Sfx.play("jugar"); createRoom(); };
   $("#cfg").onclick = () => { unlockAudio(); Voice.say("ajustes"); showSettings(); };
@@ -166,6 +167,8 @@ const SETTING_ROWS = [
   { key: "music", label: "Música", help: "", options: [[true, "Sí"], [false, "No"]] },
   { key: "voice", label: "Voz de Lola", help: "", options: [[true, "Sí"], [false, "No"]] },
   { key: "sfx", label: "Efectos de sonido", help: "Botones, entradas, batacazos y aplausos.", options: [[true, "Sí"], [false, "No"]] },
+  { key: "ligero", label: "Modo ligero", help: "Para teles que van a tirones o con colores raros: sin bordes de papel roto ni fondo en movimiento.",
+    options: [[false, "No"], [true, "Sí"]], local: true },
 ];
 
 function showSettings() {
@@ -175,7 +178,7 @@ function showSettings() {
     <li class="setting">
       <div class="setting-text"><span class="setting-label">${r.label}</span>${r.help ? `<span class="setting-help">${r.help}</span>` : ""}</div>
       <div class="seg" role="group" aria-label="${r.label}">
-        ${r.options.map(([v, t]) => `<button class="seg-btn ${settings[r.key] === v ? "on" : ""}" data-key="${r.key}" data-val='${JSON.stringify(v)}'>${t}</button>`).join("")}
+        ${r.options.map(([v, t]) => `<button class="seg-btn ${(r.local ? esLigero() : settings[r.key]) === v ? "on" : ""}" data-key="${r.key}" data-val='${JSON.stringify(v)}'>${t}</button>`).join("")}
       </div>
     </li>`;
   app.innerHTML = `
@@ -186,6 +189,11 @@ function showSettings() {
       <p class="credits">Escape también vuelve · los ajustes valen para la próxima sala · voz de Lola generada con ElevenLabs</p>
     </section>`;
   app.querySelectorAll(".seg-btn").forEach((b) => b.onclick = () => {
+    if (b.dataset.key === "ligero") {
+      ponLigero(JSON.parse(b.dataset.val));
+      app.querySelectorAll(`.seg-btn[data-key="ligero"]`).forEach((x) => x.classList.toggle("on", x === b));
+      return;
+    }
     settings[b.dataset.key] = JSON.parse(b.dataset.val);
     saveSettings();
     app.querySelectorAll(`.seg-btn[data-key="${b.dataset.key}"]`).forEach((x) => x.classList.toggle("on", x === b));
@@ -1705,7 +1713,7 @@ boot();
 // La tele suele quedarse encendida días: si hay versión nueva publicada, se actualiza sola
 // (solo en el menú o en la sala, nunca a mitad de partida).
 const ARCHIVOS = ["index.html", "js/host.js", "js/voice.js", "js/music.js", "js/sfx.js", "js/painter.js", "js/motion.js",
-  "js/awards.js", "js/duraciones.js", "js/prompts.js", "js/track.js", "js/util.js", "js/firebase.js", "css/style.css"];
+  "js/awards.js", "js/duraciones.js", "js/ligero.js", "js/prompts.js", "js/track.js", "js/util.js", "js/firebase.js", "css/style.css"];
 let huella = null;
 async function huellaActual() {
   const t = await Promise.all(ARCHIVOS.slice(0, 2).concat("css/style.css").map((f) => fetch(f, { cache: "no-store" }).then((r) => r.text())));

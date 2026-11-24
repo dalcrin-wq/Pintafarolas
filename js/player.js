@@ -1,6 +1,7 @@
 // El móvil de cada jugador: mando, lienzo y papeleta de voto.
 import { login, db, ref, set, update, onValue, serverTimestamp, onDisconnect, serverNow } from "./firebase.js";
 import { DrawPad } from "./pad.js";
+import "./ligero.js";
 import { startPainter, setScene } from "./painter.js";
 import { startMotion } from "./motion.js";
 import { computeAwards } from "./awards.js";
