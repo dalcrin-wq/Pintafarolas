@@ -1463,7 +1463,7 @@ setInterval(async () => {
   try {
     const h = await huellaActual();
     if (huella === null) { huella = h; return; }
-    const quieto = !state || ["lobby", "end"].includes(state.phase) || /^(menu|settings)/.test(viewKey);
+    const quieto = !state || state.phase === "lobby" || (state.phase === "end" && state.galaDone) || /^(menu|settings)/.test(viewKey);
     if (h !== huella && quieto) {
       await Promise.all(ARCHIVOS.map((f) => fetch(f, { cache: "reload" }).catch(() => {})));
       location.reload();
